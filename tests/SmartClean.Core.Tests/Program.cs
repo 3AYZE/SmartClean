@@ -1,6 +1,7 @@
 using System.Text.Json;
 using SmartClean.Core;
 using SmartClean.Core.Updates;
+using SmartClean.Core.Cleanup;
 
 var failures = new List<string>();
 void Check(bool ok, string test)
@@ -128,19 +129,89 @@ ShouldRejectUpdate(updateFixture.Replace("v0.2.0.3", "v0.2.0.3-beta"),
 ShouldRejectUpdate(updateFixture.Replace("\"prerelease\":false", "\"prerelease\":true"),
     "Prerelease not installed via stable channel");
 
-// A policy-level guard: the core library intentionally has no delete/uninstall public API.
-var publicMethods = typeof(ScanCoordinator).Assembly.GetExportedTypes()
+// A candidate is NOT permission to delete an arbitrary old file.
+// Exercise the actual move/journal/restore/purge lifecycle in an isolated fixture.
+var tempFixture = Path.Combine(Path.GetTempPath(),
+    "smartclean-temp-test-" + Guid.NewGuid().ToString("N"));
+var vaultFixture = tempFixture + "-vault";
+Directory.CreateDirectory(tempFixture);
+try
+{
+    var aged = Path.Combine(tempFixture, "aged.tmp");
+    var newFile = Path.Combine(tempFixture, "fresh.tmp");
+    var document = Path.Combine(tempFixture, "personal.docx");
+    var nested = Path.Combine(tempFixture, "private");
+    Directory.CreateDirectory(nested);
+    var nestedFile = Path.Combine(nested, "nested.tmp");
+    foreach (var file in new[] { aged, newFile, document, nestedFile })
+        File.WriteAllText(file, "sample");
+    var oldDate = DateTime.UtcNow.AddDays(-40);
+    foreach (var file in new[] { aged, document, nestedFile })
+        File.SetLastWriteTimeUtc(file, oldDate);
+
+    var cleaner = new TempRecoveryManager(tempFixture, vaultFixture, testPaths: true);
+    var found = cleaner.FindCandidates();
+    Check(found.Items.Count == 1 && found.Items[0].FullPath == aged,
+        "Only old, top-level temporary files qualify; documents and subfolders protected");
+
+    var candidate = found.Items[0];
+    File.AppendAllText(aged, "changed");
+    try { cleaner.MoveToRecovery(candidate); Check(false, "Changed candidate blocked"); }
+    catch (InvalidOperationException) { Check(true, "Changed candidate blocked"); }
+
+    var current = cleaner.FindCandidates().Items.Single();
+    var saved = cleaner.MoveToRecovery(current);
+    Check(!File.Exists(aged) && cleaner.ListRecovery().Single().Id == saved.Id,
+        "Move journals original path and leaves recoverable payload");
+    Check(File.Exists(Path.Combine(vaultFixture, saved.Id, "temporary-file.bin")),
+        "Quarantine contains exact payload after move");
+
+    File.WriteAllText(aged, "new file must survive");
+    try { cleaner.Restore(saved.Id); Check(false, "Restore refuses overwrite"); }
+    catch (IOException) { Check(true, "Restore refuses overwrite"); }
+    Check(File.ReadAllText(aged) == "new file must survive",
+        "Original-path collision is unchanged");
+    File.Delete(aged);
+    cleaner.Restore(saved.Id);
+    Check(File.Exists(aged) && cleaner.ListRecovery().Count == 0,
+        "Restore returns original file and removes it from active recovery list");
+
+    var again = cleaner.FindCandidates().Items.Single();
+    var againSaved = cleaner.MoveToRecovery(again);
+    var purged = cleaner.PurgeFromRecovery(againSaved.Id);
+    Check(purged > 0 && cleaner.ListRecovery().Count == 0
+        && !File.Exists(Path.Combine(vaultFixture, againSaved.Id, "temporary-file.bin")),
+        "Only explicitly quarantined payload can be purged");
+
+    try
+    {
+        cleaner.PurgeFromRecovery("../invalid");
+        Check(false, "Invalid recovery identifier blocked");
+    }
+    catch (ArgumentException) { Check(true, "Invalid recovery identifier blocked"); }
+
+    Check(File.Exists(document) && File.Exists(newFile) && File.Exists(nestedFile),
+        "Personal, recent and nested files remain intact");
+}
+finally
+{
+    if (Directory.Exists(tempFixture)) Directory.Delete(tempFixture, recursive: true);
+    if (Directory.Exists(vaultFixture)) Directory.Delete(vaultFixture, recursive: true);
+}
+
+// Keep direct destructive APIs isolated to the narrowly scoped recovery engine.
+var unsafeMethods = typeof(ScanCoordinator).Assembly.GetExportedTypes()
+    .Where(t => t != typeof(TempRecoveryManager))
     .SelectMany(t => t.GetMethods(System.Reflection.BindingFlags.Public
                                  | System.Reflection.BindingFlags.Static
                                  | System.Reflection.BindingFlags.Instance
                                  | System.Reflection.BindingFlags.DeclaredOnly))
-    // Record properties such as get_UninstallCommand are data, not destructive actions.
     .Where(m => !m.IsSpecialName)
     .Select(m => m.Name).ToArray();
-Check(!publicMethods.Any(m => m.Contains("Delete", StringComparison.OrdinalIgnoreCase)
+Check(!unsafeMethods.Any(m => m.Contains("Delete", StringComparison.OrdinalIgnoreCase)
     || m.Contains("Uninstall", StringComparison.OrdinalIgnoreCase)
-    || m.Contains("RemoveFile", StringComparison.OrdinalIgnoreCase)),
-    "Public core API has no destructive operations");
+    || m.Contains("Purge", StringComparison.OrdinalIgnoreCase)),
+    "No general-purpose delete or uninstall API exposed by core");
 
 Console.WriteLine($"\n{(failures.Count == 0 ? "ALL CHECKS PASSED" : $"{failures.Count} CHECK(S) FAILED")}");
 return failures.Count == 0 ? 0 : 1;
