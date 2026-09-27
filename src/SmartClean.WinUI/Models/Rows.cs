@@ -1,3 +1,4 @@
+using SmartClean.Core.Cleanup;
 using SmartClean.Core;
 
 namespace SmartClean.WinUI.Models;
@@ -22,4 +23,23 @@ public sealed class FolderRow
     public string Detail => $"{Finding.Files:N0} files · {Finding.OldFiles:N0} modified over 180 days ago";
     public string Flag => Finding.Truncated ? "Partial scan" : Finding.IsPersonalData ? "Personal files" : "Review only";
     public FolderRow(FolderFinding finding) => Finding = finding;
+}
+
+public sealed class TempCandidateRow
+{
+    public TempCandidate Candidate { get; }
+    public string Name => System.IO.Path.GetFileName(Candidate.FullPath);
+    public string Location => Candidate.FullPath;
+    public string Detail => $"Modified {Candidate.LastWriteUtc.ToLocalTime():MMM d, yyyy} · Top-level temporary file";
+    public string Size => Formatting.Bytes(Candidate.Bytes);
+    public TempCandidateRow(TempCandidate candidate) => Candidate = candidate;
+}
+
+public sealed class RecoveryRow
+{
+    public RecoveryItem Item { get; }
+    public string Name => System.IO.Path.GetFileName(Item.OriginalPath);
+    public string Detail => $"Moved {Item.MovedAtUtc.LocalDateTime:MMM d, yyyy · h:mm tt} · {Formatting.Bytes(Item.Bytes)}";
+    public string OriginalPath => Item.OriginalPath;
+    public RecoveryRow(RecoveryItem item) => Item = item;
 }
