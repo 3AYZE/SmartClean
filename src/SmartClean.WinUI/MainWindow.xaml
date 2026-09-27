@@ -1,0 +1,313 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Window
+    x:Class="SmartClean.WinUI.MainWindow"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
+    xmlns:models="using:SmartClean.WinUI.Models"
+    Title="SmartClean">
+    <Window.SystemBackdrop>
+        <MicaBackdrop Kind="Base" />
+    </Window.SystemBackdrop>
+    <Grid x:Name="RootGrid">
+        <Grid.RowDefinitions>
+            <RowDefinition Height="48" />
+            <RowDefinition Height="*" />
+        </Grid.RowDefinitions>
+        <Grid x:Name="TitleBarArea" Grid.Row="0" Padding="20,0">
+            <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
+                <FontIcon Glyph="&#xE8B7;" FontSize="19" Foreground="{ThemeResource SmartAccent}" />
+                <TextBlock Text="SmartClean" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text="Preview 0.2" Foreground="{ThemeResource SmartSubtleText}"
+                           FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0" />
+            </StackPanel>
+        </Grid>
+
+        <NavigationView x:Name="Nav" Grid.Row="1" PaneDisplayMode="Left"
+                        OpenPaneLength="216" CompactPaneLength="52"
+                        IsBackButtonVisible="Collapsed" IsSettingsVisible="False"
+                        IsPaneToggleButtonVisible="True" PaneTitle="YOUR COMPUTER"
+                        SelectionChanged="OnNavigationChanged">
+            <NavigationView.MenuItems>
+                <NavigationViewItem Content="Overview" Tag="overview">
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Home" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Applications" Tag="apps">
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="AllApps" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Files &amp; storage" Tag="folders">
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Folder" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Protection" Tag="safety">
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Permissions" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+                <NavigationViewItem Content="Settings" Tag="settings">
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Setting" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
+            </NavigationView.MenuItems>
+            <Grid>
+                <Grid.RowDefinitions>
+                    <RowDefinition Height="Auto" />
+                    <RowDefinition Height="*" />
+                </Grid.RowDefinitions>
+                <StackPanel Grid.Row="0" Spacing="4">
+                <InfoBar x:Name="UpdateInfo" Title="SmartClean update available" Severity="Informational" IsOpen="False" IsClosable="True" Margin="18,8,22,0">
+                    <InfoBar.ActionButton>
+                        <Button Content="Review update" Click="ReviewUpdate_Click" />
+                    </InfoBar.ActionButton>
+                </InfoBar>
+                <InfoBar x:Name="StatusInfo" Grid.Row="0" Title="Read-only preview"
+                         Message="This version measures storage and inspects dependencies. It cannot delete or uninstall anything."
+                         Severity="Informational" IsOpen="True" IsClosable="False" Margin="18,8,22,4" />
+                </StackPanel>
+
+                <!-- OVERVIEW -->
+                <ScrollViewer x:Name="OverviewView" Grid.Row="1" VerticalScrollBarVisibility="Auto">
+                    <StackPanel MaxWidth="1040" HorizontalAlignment="Stretch" Padding="28,22,28,42" Spacing="18">
+                        <Grid ColumnSpacing="16">
+                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                            <StackPanel Spacing="5">
+                                <TextBlock Text="Overview" Style="{StaticResource TitleTextBlockStyle}" />
+                                <TextBlock Text="A clear picture of your apps, storage and known dependencies."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                            </StackPanel>
+                            <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
+                                <Button x:Name="CancelButton" Content="Cancel" Click="CancelScan_Click" IsEnabled="False" />
+                                <Button x:Name="RefreshButton" Content="Scan computer" Click="StartScan_Click"
+                                        Style="{StaticResource AccentButtonStyle}" />
+                            </StackPanel>
+                        </Grid>
+                        <StackPanel Orientation="Horizontal" Spacing="12" VerticalAlignment="Center">
+                            <ProgressRing x:Name="ScanRing" IsActive="False" Width="18" Height="18" />
+                            <TextBlock x:Name="ScanStatusText" Text="No scan has run yet."
+                                       VerticalAlignment="Center" Foreground="{ThemeResource SmartSubtleText}" />
+                        </StackPanel>
+                        <Border Background="{ThemeResource SmartCardBackground}"
+                                BorderBrush="{ThemeResource SmartCardStroke}" BorderThickness="1"
+                                CornerRadius="12" Padding="22">
+                            <StackPanel Spacing="14">
+                                <TextBlock Text="System drive" FontWeight="SemiBold" FontSize="16" />
+                                <TextBlock x:Name="DiskSizeText" Text="Scan to measure available space"
+                                           FontSize="26" FontWeight="SemiBold" />
+                                <ProgressBar x:Name="DiskBar" Minimum="0" Maximum="100" Value="0" Height="8" />
+                                <TextBlock x:Name="DiskFreeText" Text="Only fixed drives are measured."
+                                           Foreground="{ThemeResource SmartSubtleText}" />
+                            </StackPanel>
+                        </Border>
+                        <Grid ColumnSpacing="14">
+                            <Grid.ColumnDefinitions>
+                                <ColumnDefinition Width="*"/><ColumnDefinition Width="*"/><ColumnDefinition Width="*"/>
+                            </Grid.ColumnDefinitions>
+                            <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                    BorderThickness="1" CornerRadius="12" Padding="20">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Installed apps" Foreground="{ThemeResource SmartSubtleText}" />
+                                    <TextBlock x:Name="AppsCount" Text="—" FontSize="30" FontWeight="SemiBold" />
+                                    <TextBlock Text="From Windows uninstall records" FontSize="12"
+                                               TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="1" Background="{ThemeResource SmartCardBackground}"
+                                    BorderBrush="{ThemeResource SmartCardStroke}" BorderThickness="1" CornerRadius="12" Padding="20">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Protected components" Foreground="{ThemeResource SmartSubtleText}" />
+                                    <TextBlock x:Name="ProtectedCount" Text="—" FontSize="30" FontWeight="SemiBold" />
+                                    <TextBlock Text="Known shared runtimes and safeguards" FontSize="12"
+                                               TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
+                                </StackPanel>
+                            </Border>
+                            <Border Grid.Column="2" Background="{ThemeResource SmartCardBackground}"
+                                    BorderBrush="{ThemeResource SmartCardStroke}" BorderThickness="1" CornerRadius="12" Padding="20">
+                                <StackPanel Spacing="8">
+                                    <TextBlock Text="Declared dependencies" Foreground="{ThemeResource SmartSubtleText}" />
+                                    <TextBlock x:Name="DependencyCount" Text="—" FontSize="30" FontWeight="SemiBold" />
+                                    <TextBlock Text="Observed .NET runtime declarations only" FontSize="12"
+                                               TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
+                                </StackPanel>
+                            </Border>
+                        </Grid>
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="22">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Storage findings" FontWeight="SemiBold" FontSize="16" />
+                                <TextBlock x:Name="StorageSummary" Text="Downloads and the temporary folder will be measured."
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="Measured size is not the same as reclaimable space. This preview makes no deletion recommendations based only on file age."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" FontSize="12" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- APPLICATIONS -->
+                <Grid x:Name="AppsView" Grid.Row="1" Visibility="Collapsed" Padding="28,22,28,24" ColumnSpacing="18">
+                    <Grid.ColumnDefinitions><ColumnDefinition Width="1.25*"/><ColumnDefinition Width="0.75*"/></Grid.ColumnDefinitions>
+                    <Grid Grid.Column="0" RowSpacing="13">
+                        <Grid.RowDefinitions><RowDefinition Height="Auto"/><RowDefinition Height="Auto"/><RowDefinition Height="*"/></Grid.RowDefinitions>
+                        <StackPanel Spacing="5">
+                            <TextBlock Text="Applications" Style="{StaticResource TitleTextBlockStyle}" />
+                            <TextBlock x:Name="AppListSubtitle" Text="Scan to inspect registered applications."
+                                       Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                        </StackPanel>
+                        <TextBox x:Name="AppsSearch" Grid.Row="1" Header="Search installed apps" PlaceholderText="Name or publisher"
+                                 TextChanged="AppsSearch_TextChanged" />
+                        <ListView x:Name="AppList" Grid.Row="2" SelectionMode="Single"
+                                  SelectionChanged="AppList_SelectionChanged" IsItemClickEnabled="False">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="models:AppRow">
+                                    <Grid Padding="5,8" ColumnSpacing="12">
+                                        <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                        <StackPanel Spacing="4">
+                                            <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                            <TextBlock Text="{x:Bind Subtitle}" FontSize="12" Foreground="{ThemeResource SmartSubtleText}"
+                                                       TextTrimming="CharacterEllipsis" />
+                                        </StackPanel>
+                                        <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="3">
+                                            <TextBlock Text="{x:Bind Size}" HorizontalAlignment="Right" />
+                                            <TextBlock Text="{x:Bind Badge}" FontSize="12" Foreground="{ThemeResource SmartSubtleText}"
+                                                       HorizontalAlignment="Right" />
+                                        </StackPanel>
+                                    </Grid>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                    </Grid>
+                    <ScrollViewer Grid.Column="1" VerticalScrollBarVisibility="Auto">
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="22">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Selected application" Foreground="{ThemeResource SmartSubtleText}" />
+                                <TextBlock x:Name="DetailName" Text="Choose an application" FontWeight="SemiBold"
+                                           FontSize="20" TextWrapping="Wrap" />
+                                <TextBlock x:Name="DetailPublisher" Text="View its available installation and dependency evidence."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <Rectangle Height="1" Fill="{ThemeResource SmartCardStroke}" Margin="0,4" />
+                                <TextBlock Text="Protection status" FontWeight="SemiBold" />
+                                <TextBlock x:Name="DetailProtection" Text="No item selected." TextWrapping="Wrap" />
+                                <TextBlock Text="Declared runtime dependencies" FontWeight="SemiBold" Margin="0,6,0,0" />
+                                <TextBlock x:Name="DetailDependencies" Text="Select an item to inspect its evidence."
+                                           TextWrapping="Wrap" />
+                                <TextBlock Text="Install location" FontWeight="SemiBold" Margin="0,6,0,0" />
+                                <TextBlock x:Name="DetailLocation" Text="—" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                <TextBlock Text="Important: absence of observed declarations does not prove that an app has no dependencies."
+                                           Foreground="{ThemeResource SmartSubtleText}" FontSize="12" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </ScrollViewer>
+                </Grid>
+
+                <!-- FILES AND STORAGE -->
+                <ScrollViewer x:Name="FoldersView" Grid.Row="1" Visibility="Collapsed">
+                    <StackPanel MaxWidth="1040" HorizontalAlignment="Stretch" Padding="28,22,28,42" Spacing="16">
+                        <TextBlock Text="Files &amp; storage" Style="{StaticResource TitleTextBlockStyle}" />
+                        <TextBlock Text="Measure known folders without opening, moving or deleting their contents. Linked folders are skipped."
+                                   Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                        <ListView x:Name="FolderList" SelectionMode="None" IsItemClickEnabled="False">
+                            <ListView.ItemTemplate>
+                                <DataTemplate x:DataType="models:FolderRow">
+                                    <Border BorderBrush="{ThemeResource SmartCardStroke}" BorderThickness="1"
+                                            Background="{ThemeResource SmartCardBackground}" CornerRadius="10" Padding="18" Margin="0,5,0,7">
+                                        <Grid ColumnSpacing="14">
+                                            <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                            <StackPanel Spacing="6">
+                                                <TextBlock Text="{x:Bind Name}" FontSize="17" FontWeight="SemiBold" />
+                                                <TextBlock Text="{x:Bind Path}" Foreground="{ThemeResource SmartSubtleText}"
+                                                           TextWrapping="Wrap" FontSize="12" />
+                                                <TextBlock Text="{x:Bind Detail}" Foreground="{ThemeResource SmartSubtleText}" FontSize="12" />
+                                            </StackPanel>
+                                            <StackPanel Grid.Column="1" HorizontalAlignment="Right" Spacing="8">
+                                                <TextBlock Text="{x:Bind Size}" FontSize="19" FontWeight="SemiBold" HorizontalAlignment="Right" />
+                                                <TextBlock Text="{x:Bind Flag}" Foreground="{ThemeResource SmartSubtleText}" FontSize="12" HorizontalAlignment="Right" />
+                                            </StackPanel>
+                                        </Grid>
+                                    </Border>
+                                </DataTemplate>
+                            </ListView.ItemTemplate>
+                        </ListView>
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="How to interpret the findings" FontWeight="SemiBold" />
+                                <TextBlock Text="Downloads contain personal files, even when they are old. Temporary folders may include files used by running applications. This version reports sizes only; it cannot approve deletion."
+                                           TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- PROTECTION -->
+                <ScrollViewer x:Name="SafetyView" Grid.Row="1" Visibility="Collapsed">
+                    <StackPanel MaxWidth="970" HorizontalAlignment="Stretch" Padding="28,22,28,42" Spacing="16">
+                        <TextBlock Text="Protection" Style="{StaticResource TitleTextBlockStyle}" />
+                        <TextBlock Text="Safety rules are mandatory in the first release. No removal controls are available."
+                                   Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Protected by design" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock Text="• Known shared runtimes (.NET, VC++, WebView2, graphics components)" TextWrapping="Wrap" />
+                                <TextBlock Text="• Unknown or unverified dependencies: never assumed safe" TextWrapping="Wrap" />
+                                <TextBlock Text="• Personal projects, Downloads and game saves: no automatic deletion" TextWrapping="Wrap" />
+                                <TextBlock Text="• Directory junctions and symbolic links: not followed by the folder scan" TextWrapping="Wrap" />
+                                <TextBlock Text="• Uninstall commands: displayed as evidence only; never executed" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                        <TextBlock Text="Scan limitations" FontSize="17" FontWeight="SemiBold" Margin="0,6,0,0" />
+                        <TextBlock Text="The dependency inspector currently reads bounded .NET runtimeconfig files in registered install locations. Native DLL loading, optional features, portable apps and most non-.NET dependency relationships are not yet verified."
+                                   TextWrapping="Wrap" />
+                        <ListView x:Name="WarningsList" SelectionMode="None" IsItemClickEnabled="False" />
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- SETTINGS -->
+                <ScrollViewer x:Name="SettingsView" Grid.Row="1" Visibility="Collapsed">
+                    <StackPanel MaxWidth="850" HorizontalAlignment="Stretch" Padding="28,22,28,42" Spacing="16">
+                        <TextBlock Text="Settings" Style="{StaticResource TitleTextBlockStyle}" />
+                        <TextBlock Text="Essential preferences only. Safety protections cannot be disabled."
+                                   Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Appearance" FontWeight="SemiBold" FontSize="17" />
+                                <ComboBox x:Name="ThemePicker" Header="App theme" SelectedIndex="0" Width="240"
+                                          SelectionChanged="ThemePicker_SelectionChanged">
+                                    <ComboBoxItem Content="Use Windows setting" />
+                                    <ComboBoxItem Content="Light" />
+                                    <ComboBoxItem Content="Dark" />
+                                </ComboBox>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Application updates" FontWeight="SemiBold" FontSize="17" />
+                                <TextBlock x:Name="CurrentVersionText" Text="Installed version: 0.2" />
+                                <TextBlock x:Name="UpdateStatusText" Text="Checking for public GitHub releases when SmartClean starts."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Button x:Name="CheckUpdatesButton" Content="Check for updates" Click="CheckUpdates_Click" />
+                                    <Button x:Name="InstallUpdateButton" Visibility="Collapsed" Content="Download and install"
+                                            Click="InstallUpdate_Click" Style="{StaticResource AccentButtonStyle}" />
+                                </StackPanel>
+                                <ProgressBar x:Name="UpdateDownloadBar" IsIndeterminate="False" Minimum="0" Maximum="100"
+                                             Value="0" Height="6" Visibility="Collapsed" />
+                                <TextBlock Text="Installs only approved updates from 3AYZE/SmartClean. This app stores no GitHub credentials."
+                                           FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
+                            </StackPanel>
+                        </Border>
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="8">
+                                <TextBlock Text="Privacy &amp; scanning" FontWeight="SemiBold" FontSize="17" />
+                                <TextBlock Text="Local only. No telemetry, advertising, account or cloud connection." TextWrapping="Wrap" />
+                                <TextBlock Text="Scanning is manually initiated and reads Windows uninstall records, limited runtime declarations, your Downloads and temporary folders, and fixed-drive capacity."
+                                           TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
+                                <TextBlock Text="No application activity monitoring is enabled in version 0.1. File access times are not used to label anything unused."
+                                           TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+            </Grid>
+        </NavigationView>
+    </Grid>
+</Window>

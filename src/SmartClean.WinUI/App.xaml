@@ -1,0 +1,33 @@
+<?xml version="1.0" encoding="utf-8"?>
+<Application
+    x:Class="SmartClean.WinUI.App"
+    xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
+    xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml">
+    <Application.Resources>
+        <ResourceDictionary>
+            <ResourceDictionary.MergedDictionaries>
+                <XamlControlsResources xmlns="using:Microsoft.UI.Xaml.Controls" />
+            </ResourceDictionary.MergedDictionaries>
+            <ResourceDictionary.ThemeDictionaries>
+                <ResourceDictionary x:Key="Light">
+                    <SolidColorBrush x:Key="SmartCardBackground" Color="#F9FBFF" />
+                    <SolidColorBrush x:Key="SmartCardStroke" Color="#1F64748B" />
+                    <SolidColorBrush x:Key="SmartSubtleText" Color="#65738A" />
+                    <SolidColorBrush x:Key="SmartAccent" Color="#336DB6" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Dark">
+                    <SolidColorBrush x:Key="SmartCardBackground" Color="#20242B" />
+                    <SolidColorBrush x:Key="SmartCardStroke" Color="#397A8795" />
+                    <SolidColorBrush x:Key="SmartSubtleText" Color="#A7B0BE" />
+                    <SolidColorBrush x:Key="SmartAccent" Color="#82B1FB" />
+                </ResourceDictionary>
+                <ResourceDictionary x:Key="Default">
+                    <SolidColorBrush x:Key="SmartCardBackground" Color="#20242B" />
+                    <SolidColorBrush x:Key="SmartCardStroke" Color="#397A8795" />
+                    <SolidColorBrush x:Key="SmartSubtleText" Color="#A7B0BE" />
+                    <SolidColorBrush x:Key="SmartAccent" Color="#82B1FB" />
+                </ResourceDictionary>
+            </ResourceDictionary.ThemeDictionaries>
+        </ResourceDictionary>
+    </Application.Resources>
+</Application>
