@@ -1,0 +1,43 @@
+name: Verify SmartClean Windows build
+on:
+  push:
+    branches: [ main ]
+  pull_request:
+    branches: [ main ]
+  workflow_dispatch:
+permissions:
+  contents: read
+concurrency:
+  group: smartclean-ci
+  cancel-in-progress: true
+jobs:
+  verify:
+    runs-on: windows-2022
+    timeout-minutes: 35
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Restore for Windows x64
+        shell: pwsh
+        run: >-
+          dotnet restore src/SmartClean.WinUI/SmartClean.WinUI.csproj
+          --configfile NuGet.Config -r win-x64 -p:SmartCleanTargetFramework=net10.0
+          -p:Platform=x64 -p:EnableMsixTooling=true -p:WindowsAppSDKSelfContained=true
+          -p:SelfContained=true
+      - name: Core safety regression tests
+        shell: pwsh
+        run: >-
+          dotnet run --project tests/SmartClean.Core.Tests/SmartClean.Core.Tests.csproj
+          --configuration Release -p:SmartCleanTargetFramework=net10.0
+      - name: Compile unpackaged Windows application
+        shell: pwsh
+        run: >-
+          dotnet publish src/SmartClean.WinUI/SmartClean.WinUI.csproj
+          --no-restore --configuration Release --runtime win-x64 --self-contained true
+          -p:SmartCleanTargetFramework=net10.0 -p:Platform=x64 -p:EnableMsixTooling=true
+          -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false -p:PublishAot=false
+          -p:PublishReadyToRun=false -p:PublishSingleFile=false
+          --output output/SmartClean-win-x64
+      # Intentionally no release, artifact, installer, or deployment here.
