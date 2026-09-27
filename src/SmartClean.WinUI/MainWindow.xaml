@@ -17,7 +17,7 @@
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
                 <FontIcon Glyph="&#xE8B7;" FontSize="19" Foreground="{ThemeResource SmartAccent}" />
                 <TextBlock Text="SmartClean" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-                <TextBlock Text="Preview 0.2" Foreground="{ThemeResource SmartSubtleText}"
+                <TextBlock Text="Preview 0.3" Foreground="{ThemeResource SmartSubtleText}"
                            FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0" />
             </StackPanel>
         </Grid>
@@ -37,6 +37,9 @@
                 <NavigationViewItem Content="Files &amp; storage" Tag="folders">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Folder" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Cleanup" Tag="cleanup">
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Delete" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Protection" Tag="safety">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Permissions" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
@@ -55,8 +58,8 @@
                         <Button Content="Review update" Click="ReviewUpdate_Click" />
                     </InfoBar.ActionButton>
                 </InfoBar>
-                <InfoBar x:Name="StatusInfo" Grid.Row="0" Title="Read-only preview"
-                         Message="This version measures storage and inspects dependencies. It cannot delete or uninstall anything."
+                <InfoBar x:Name="StatusInfo" Grid.Row="0" Title="Ready to scan"
+                         Message="Scanning does not change files. Optional cleanup moves only selected eligible temporary files to Recovery."
                          Severity="Informational" IsOpen="True" IsClosable="False" Margin="18,8,22,4" />
                 </StackPanel>
 
@@ -234,11 +237,81 @@
                     </StackPanel>
                 </ScrollViewer>
 
+                <!-- BOUNDED TEMPORARY-FILE CLEANUP -->
+                <ScrollViewer x:Name="CleanupView" Grid.Row="1" Visibility="Collapsed">
+                    <StackPanel MaxWidth="1010" HorizontalAlignment="Stretch" Padding="28,22,28,42" Spacing="16">
+                        <TextBlock Text="Cleanup" Style="{StaticResource TitleTextBlockStyle}" />
+                        <TextBlock Text="Only top-level .tmp and .temp files in your own temporary folder, unchanged for at least 30 days, are eligible. Nothing is removed automatically."
+                                   TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="13">
+                                <TextBlock Text="Temporary-file candidates" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock x:Name="CleanupSummary" Text="Scan your computer to find eligible temporary files."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <TextBlock Text="Moving a file to Recovery does NOT free disk space. Restore it if needed, or separately approve permanent deletion from Recovery."
+                                           FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <ListView x:Name="TempCandidateList" SelectionMode="Multiple" MaxHeight="320"
+                                          SelectionChanged="TempCandidateList_SelectionChanged">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:TempCandidateRow">
+                                            <Grid ColumnSpacing="14" Padding="3,7">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <StackPanel Spacing="3">
+                                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{x:Bind Detail}" Foreground="{ThemeResource SmartSubtleText}" FontSize="12" />
+                                                    <TextBlock Text="{x:Bind Location}" Foreground="{ThemeResource SmartSubtleText}"
+                                                               FontSize="11" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="{x:Bind Size}" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Button x:Name="CleanupRefreshButton" Content="Rescan temporary files" Click="CleanupRefresh_Click" />
+                                    <Button x:Name="MoveTempButton" Content="Move selected to Recovery" IsEnabled="False"
+                                            Click="MoveTemp_Click" Style="{StaticResource AccentButtonStyle}" />
+                                </StackPanel>
+                            </StackPanel>
+                        </Border>
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="13">
+                                <TextBlock Text="Recovery" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock x:Name="RecoverySummary" Text="Recovery items appear here after a file is moved."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <ListView x:Name="RecoveryList" SelectionMode="Single" MaxHeight="290"
+                                          SelectionChanged="RecoveryList_SelectionChanged">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:RecoveryRow">
+                                            <StackPanel Spacing="4" Padding="3,7">
+                                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" />
+                                                <TextBlock Text="{x:Bind Detail}" FontSize="12"
+                                                           Foreground="{ThemeResource SmartSubtleText}" />
+                                                <TextBlock Text="{x:Bind OriginalPath}" FontSize="11" TextTrimming="CharacterEllipsis"
+                                                           Foreground="{ThemeResource SmartSubtleText}" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Button x:Name="RestoreButton" Content="Restore selected" IsEnabled="False" Click="Restore_Click" />
+                                    <Button x:Name="PurgeButton" Content="Delete selected permanently" IsEnabled="False"
+                                            Click="Purge_Click" />
+                                </StackPanel>
+                                <TextBlock Text="Deleting a recovery item is irreversible. No personal files, program folders, or shared runtimes are candidates."
+                                           FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                    </StackPanel>
+                </ScrollViewer>
+
                 <!-- PROTECTION -->
                 <ScrollViewer x:Name="SafetyView" Grid.Row="1" Visibility="Collapsed">
                     <StackPanel MaxWidth="970" HorizontalAlignment="Stretch" Padding="28,22,28,42" Spacing="16">
                         <TextBlock Text="Protection" Style="{StaticResource TitleTextBlockStyle}" />
-                        <TextBlock Text="Safety rules are mandatory in the first release. No removal controls are available."
+                        <TextBlock Text="Mandatory safeguards remain in place. Cleanup is limited to reviewed temporary-file candidates; application removal is Windows-managed."
                                    Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
                         <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
                                 BorderThickness="1" CornerRadius="12" Padding="20">
@@ -248,7 +321,7 @@
                                 <TextBlock Text="• Unknown or unverified dependencies: never assumed safe" TextWrapping="Wrap" />
                                 <TextBlock Text="• Personal projects, Downloads and game saves: no automatic deletion" TextWrapping="Wrap" />
                                 <TextBlock Text="• Directory junctions and symbolic links: not followed by the folder scan" TextWrapping="Wrap" />
-                                <TextBlock Text="• Uninstall commands: displayed as evidence only; never executed" TextWrapping="Wrap" />
+                                <TextBlock Text="• App removal: Windows Settings handles uninstallation; registry commands are never executed" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
                         <TextBlock Text="Scan limitations" FontSize="17" FontWeight="SemiBold" Margin="0,6,0,0" />
@@ -290,7 +363,7 @@
                                 </StackPanel>
                                 <ProgressBar x:Name="UpdateDownloadBar" IsIndeterminate="False" Minimum="0" Maximum="100"
                                              Value="0" Height="6" Visibility="Collapsed" />
-                                <TextBlock Text="Installs only approved updates from 3AYZE/SmartClean. This app stores no GitHub credentials."
+                                <TextBlock Text="Installs only approved, hash-verified releases. Source commits alone do not update this EXE; private releases need authentication, which this app does not store."
                                            FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
                             </StackPanel>
                         </Border>
@@ -301,7 +374,7 @@
                                 <TextBlock Text="Local only. No telemetry, advertising, account or cloud connection." TextWrapping="Wrap" />
                                 <TextBlock Text="Scanning is manually initiated and reads Windows uninstall records, limited runtime declarations, your Downloads and temporary folders, and fixed-drive capacity."
                                            TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
-                                <TextBlock Text="No application activity monitoring is enabled in version 0.1. File access times are not used to label anything unused."
+                                <TextBlock Text="Application usage tracking is not enabled. Age is only used to shortlist eligible temporary files, never to authorize removing programs."
                                            TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
                             </StackPanel>
                         </Border>
