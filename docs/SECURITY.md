@@ -1,32 +1,33 @@
-# Safety model and manual Windows test checklist
+# SmartClean 0.3 — safety model and Windows QA
 
-## Mandatory guarantees for v0.1
+## Mandatory constraints
 
-1. No destructive APIs in the app, no calls to an uninstaller, no reg writes and no privileged services.
-2. Unreadable registry entries, runtime configs or folders cannot cause an app to be marked dependency-free.
-3. Scans do not follow directory reparse points or intentionally open arbitrary personal file contents. Bounded `.runtimeconfig.json` parsing is an exception for explicit dependency metadata in registered install locations.
-4. File age is based on last modification, **not usage**. No usage claims or automatic removal recommendations.
-5. Scan cancellation and failure preserve the previous completed snapshot; incomplete measurements are labeled.
-6. Do not elevate privileges for a normal scan or write any cloud/telemetry records.
+1. Candidates are top-level regular .tmp/.temp files under the current user's local temp folder, last modified at least 30 days ago. No recursive or generalized old-file deletion. Reparse roots and file reparse points are blocked; enumeration is bounded.
+2. File age is not proof of non-use. The user must select proposed items and approve moving them to Recovery. Changed, ineligible or in-use files are rechecked and skipped.
+3. The recovery vault is under LOCALAPPDATA/SmartClean/Recovery, on the same volume and outside the user's temp folder. A per-file JSON journal records the original path before moving. An interrupted move can leave a pending journal; items with a stored payload remain recoverable.
+4. Restoration refuses to overwrite any existing original path. Permanent deletion is restricted to the selected vault payload identified by an internal GUID and requires a second explicit warning. Moving to Recovery alone frees no disk space.
+5. Scanning never requires elevation or changes the registry, drivers, Windows services or application installations. Unverified dependencies stay unverified. SmartClean only offers to open Windows Settings for user-managed application uninstallation.
+6. No untrusted package source, telemetry, silent cleanup, embedded GitHub token, silent EXE replacement or release-on-push workflow.
+7. These protections reduce accidental data loss. They are not a sandbox against software with full access to the same user's account or against malicious edits to the recovery journal.
 
-## Manual QA on an actual Windows 11 machine
+## Automated core checks
 
-- [ ] Build and launch x64 release; no Visual Studio needed on target machine after self-contained publish.
-- [ ] Test light/dark/system switching, resized window, collapsed sidebar, keyboard navigation and reduced-motion Windows setting.
-- [ ] Scan standard account and admin account: no UAC prompts for ordinary scan; inaccessible paths show warning rather than crash.
-- [ ] Verify installed app list against Apps & Features, including 32/64-bit and per-user installs. Note portable applications are *not* in inventory.
-- [ ] Install a test framework-dependent .NET app with runtimeconfig and verify the version/evidence appears in the details panel.
-- [ ] Check known Microsoft .NET, VC++ and WebView2 runtime entries are protected regardless of observed dependent app count.
-- [ ] Create Downloads nested folders, symlink/junction to an external path and an inaccessible folder; ensure no traversal across links and partial results are flagged.
-- [ ] Cancel halfway through a scan and confirm the previous snapshot remains visible.
-- [ ] Scan with nearly full disk, removable drives and redirected Downloads; the latter is a documented unsupported case in this release.
-- [ ] Confirm Task Manager CPU/disk usage during normal scan; UI remains responsive and no scanner remains after app exits.
-- [ ] Run core test harness. Build must not ship until all automated tests and relevant manual Windows tests pass.
+- [x] Shared runtimes remain protected even without observed dependent apps.
+- [x] Explicit .NET frameworks are parsed correctly and self-contained frameworks are not counted as external dependencies.
+- [x] Folder scans are bounded, cancelable and skip linked directories.
+- [x] Non-temporary, nested and recent files cannot become cleanup candidates.
+- [x] A file changed since scanning is rejected at move time.
+- [x] Moved files have a journal and recoverable vault payload.
+- [x] Restoration refuses overwrite of existing original paths.
+- [x] Permanent deletion is limited to explicitly selected vault payloads; invalid IDs are rejected.
 
-## Future destructive operations: release blockers
+## Manual Windows checks still needed
 
-- Structured allowlist for OS-supported disposable cache types and user-specific eligibility.
-- Per-item preview, in-use check, file identity verification immediately before deletion, symlink protections and TOCTOU defenses.
-- Recycle Bin or dedicated recovery area where actually supported, with audit journal and integrity tests. Do not promise application uninstall rollback.
-- Official registered uninstaller use only. No direct removal of Windows servicing components, drivers, shared runtimes, WinSxS or MSI internal caches.
-- User-initiated approval for application uninstall, downloads, projects and any file with unknown ownership.
+- [ ] Launch as a standard user from a clean profile with no Visual Studio present.
+- [ ] Test keyboard navigation, high contrast, reduced motion, scaling, light/dark theme, small windows and sidebar collapse.
+- [ ] Test locked temporary files, full disks, standard permissions and inaccessible roots; errors must be clear and UI responsive.
+- [ ] Simulate interruption immediately before and after a move and journal update; inspect pending journals.
+- [ ] Test an existing file at restoration path and a removed or redirected original temp root.
+- [ ] Test junctions, reparse points, redirected app data and external drives; recovery must stay out of the candidate root on the same volume.
+- [ ] Check protected components cannot be routed through the app's uninstall button and registry uninstall commands are never run.
+- [ ] Confirm source-only pushes create no installer and installed apps update only following an approved compiled stable release.
