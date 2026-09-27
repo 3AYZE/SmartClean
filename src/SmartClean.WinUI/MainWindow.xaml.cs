@@ -1,6 +1,7 @@
 using Microsoft.UI.Xaml;
 using Microsoft.UI.Xaml.Controls;
 using SmartClean.Core;
+using SmartClean.Core.Cleanup;
 using SmartClean.Core.Updates;
 using System.Diagnostics;
 using SmartClean.WinUI.Models;
@@ -10,6 +11,8 @@ namespace SmartClean.WinUI;
 public sealed partial class MainWindow : Window
 {
     private readonly ScanCoordinator _scanner = new();
+    private readonly TempRecoveryManager _recovery = new();
+    private bool _cleanupBusy;
     private CancellationTokenSource? _scanCancellation;
     private ScanSnapshot? _snapshot;
     private AppRow[] _allApps = [];
@@ -39,6 +42,7 @@ public sealed partial class MainWindow : Window
             _releases.Dispose();
         };
         CurrentVersionText.Text = $"Installed version: {(typeof(MainWindow).Assembly.GetName().Version ?? ReleaseClient.InstalledVersion)}";
+        RefreshRecoveryItems();
         // Do not hold up window activation or scanning for network access.
         _ = CheckForUpdatesAsync(manual: false);
     }
@@ -50,6 +54,7 @@ public sealed partial class MainWindow : Window
         OverviewView.Visibility = destination == "overview" ? Visibility.Visible : Visibility.Collapsed;
         AppsView.Visibility = destination == "apps" ? Visibility.Visible : Visibility.Collapsed;
         FoldersView.Visibility = destination == "folders" ? Visibility.Visible : Visibility.Collapsed;
+        CleanupView.Visibility = destination == "cleanup" ? Visibility.Visible : Visibility.Collapsed;
         SafetyView.Visibility = destination == "safety" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = destination == "settings" ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -67,6 +72,7 @@ public sealed partial class MainWindow : Window
         ScanStatusText.Text = "Preparing scan...";
         StatusInfo.Severity = InfoBarSeverity.Informational;
         StatusInfo.Title = "Scanning";
+        StatusInfo.IsOpen = true;
         StatusInfo.Message = "Reading only. No files, application registrations or settings are changed.";
         var progress = new Progress<string>(message =>
         {
@@ -81,17 +87,21 @@ public sealed partial class MainWindow : Window
             if (cts.IsCancellationRequested) return;
             _snapshot = snapshot;
             ShowResults(snapshot);
+            await RefreshTemporaryCandidatesAsync();
             ScanStatusText.Text = $"Last scanned {snapshot.FinishedAt:MMM d, yyyy · h:mm tt}";
             StatusInfo.Severity = snapshot.Warnings.Count > 0
                 ? InfoBarSeverity.Warning : InfoBarSeverity.Success;
-            StatusInfo.Title = "Scan finished";
+            StatusInfo.Title = snapshot.Warnings.Count > 0
+                ? "Some folder totals are partial" : "Scan complete";
             StatusInfo.Message = snapshot.Warnings.Count > 0
-                ? "Some evidence was incomplete. Open Protection to review limitations. Nothing was modified."
-                : "Results are ready. Nothing was modified or removed.";
+                ? $"{snapshot.Warnings.Count} storage scan limitation(s). See Protection for the affected folders. Nothing was changed."
+                : "Inventory and temporary-file candidates are ready. No files were changed.";
+            StatusInfo.IsOpen = snapshot.Warnings.Count > 0;
         }
         catch (OperationCanceledException)
         {
             ScanStatusText.Text = "Scan canceled. Previous results were kept.";
+            StatusInfo.IsOpen = true;
             StatusInfo.Title = "Canceled";
             StatusInfo.Message = "The scan stopped. No files or applications were changed.";
         }
@@ -99,6 +109,7 @@ public sealed partial class MainWindow : Window
         {
             ScanStatusText.Text = "Scan could not finish.";
             StatusInfo.Severity = InfoBarSeverity.Error;
+            StatusInfo.IsOpen = true;
             StatusInfo.Title = "Scan failed";
             StatusInfo.Message = $"{e.GetType().Name}: {e.Message}";
         }
@@ -151,7 +162,7 @@ public sealed partial class MainWindow : Window
                                 : "Both folders were measured without modifying anything.");
         WarningsList.ItemsSource = result.Warnings.Count > 0
             ? result.Warnings
-            : ["Only explicit .NET runtime declarations are inspected in this preview. All other dependency states remain unverified."];
+            : ["No folder measurement errors were reported. Dependency discovery is still limited to explicit .NET runtime declarations."];
         AppListSubtitle.Text = $"{result.Applications.Count:N0} registered entries · "
                              + "Registry size estimates may be missing or inaccurate.";
     }
@@ -177,6 +188,7 @@ public sealed partial class MainWindow : Window
             DetailProtection.Text = "No item selected.";
             DetailDependencies.Text = "Select an item to inspect its evidence.";
             DetailLocation.Text = "—";
+            OpenWindowsUninstallButton.IsEnabled = false;
             return;
         }
         var app = row.App;
@@ -190,6 +202,226 @@ public sealed partial class MainWindow : Window
             : string.Join("\n", deps.Select(d =>
                 $"• {d.FrameworkName} (requested {d.RequestedVersion})\n   Evidence: {d.EvidencePath}"));
         DetailLocation.Text = app.InstallLocation ?? "Not reported in uninstall registry.";
+        OpenWindowsUninstallButton.IsEnabled = !app.IsProtected;
+    }
+
+
+    // A standalone scan may be started from Cleanup without re-reading app inventory.
+    private async void CleanupRefresh_Click(object sender, RoutedEventArgs e) =>
+        await RefreshTemporaryCandidatesAsync();
+
+    private async Task RefreshTemporaryCandidatesAsync()
+    {
+        if (_cleanupBusy) return;
+        CleanupRefreshButton.IsEnabled = false;
+        CleanupSummary.Text = "Checking eligible top-level temporary files...";
+        try
+        {
+            var scan = await Task.Run(() => _recovery.FindCandidates());
+            TempCandidateList.ItemsSource = scan.Items
+                .Select(x => new TempCandidateRow(x)).ToArray();
+            var bytes = scan.Items.Sum(x => x.Bytes);
+            CleanupSummary.Text = scan.UnavailableReason is not null
+                ? scan.UnavailableReason
+                : $"{scan.Items.Count:N0} candidates · {Formatting.Bytes(bytes)} in Recovery if moved. "
+                  + "This is not free space until you permanently delete reviewed recovery items."
+                  + (scan.LimitReached ? " Candidate limit reached; results are incomplete." : "")
+                  + (scan.Skipped > 0 ? $" {scan.Skipped:N0} other entries were excluded or unreadable." : "");
+        }
+        catch (Exception ex)
+        {
+            CleanupSummary.Text = "Temporary-file scan was unsuccessful: " + ex.Message;
+            StartupDiagnostics.Record("Cleanup discovery: " + ex);
+        }
+        finally
+        {
+            CleanupRefreshButton.IsEnabled = !_cleanupBusy;
+            TempCandidateList_SelectionChanged(this, null!);
+        }
+    }
+
+    private void RefreshRecoveryItems()
+    {
+        try
+        {
+            var items = _recovery.ListRecovery();
+            RecoveryList.ItemsSource = items.Select(x => new RecoveryRow(x)).ToArray();
+            RecoverySummary.Text = items.Count == 0
+                ? "No files are currently held in Recovery."
+                : $"{items.Count:N0} recoverable file(s) · {Formatting.Bytes(items.Sum(x => x.Bytes))} still stored on disk.";
+        }
+        catch (Exception ex)
+        {
+            RecoverySummary.Text = "Recovery could not be read: " + ex.Message;
+            StartupDiagnostics.Record("Recovery listing: " + ex);
+        }
+        RecoveryList_SelectionChanged(this, null!);
+    }
+
+    private void TempCandidateList_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
+        MoveTempButton.IsEnabled = !_cleanupBusy
+            && TempCandidateList.SelectedItems.Count > 0;
+
+    private void RecoveryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var valid = !_cleanupBusy && RecoveryList.SelectedItem is RecoveryRow;
+        RestoreButton.IsEnabled = valid;
+        PurgeButton.IsEnabled = valid;
+    }
+
+    private async Task<bool> AskConfirmationAsync(string title, string message, string approve)
+    {
+        var dialog = new ContentDialog
+        {
+            XamlRoot = RootGrid.XamlRoot,
+            Title = title,
+            Content = message,
+            PrimaryButtonText = approve,
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close
+        };
+        return await dialog.ShowAsync() == ContentDialogResult.Primary;
+    }
+
+    private void SetCleanupBusy(bool busy)
+    {
+        _cleanupBusy = busy;
+        CleanupRefreshButton.IsEnabled = !busy;
+        TempCandidateList_SelectionChanged(this, null!);
+        RecoveryList_SelectionChanged(this, null!);
+    }
+
+    private async void MoveTemp_Click(object sender, RoutedEventArgs e)
+    {
+        if (_cleanupBusy) return;
+        var selected = TempCandidateList.SelectedItems.OfType<TempCandidateRow>()
+            .Select(x => x.Candidate).ToArray();
+        if (selected.Length == 0) return;
+        var total = selected.Sum(x => x.Bytes);
+        if (!await AskConfirmationAsync("Move temporary files to Recovery",
+            $"Move {selected.Length:N0} selected file(s) ({Formatting.Bytes(total)})? "
+            + "SmartClean will recheck each one and skip anything changed or in use. "
+            + "This action does not reclaim storage until you separately delete them from Recovery.",
+            "Move to Recovery")) return;
+        SetCleanupBusy(true);
+        var succeeded = 0;
+        var failures = new List<string>();
+        try
+        {
+            await Task.Run(() =>
+            {
+                foreach (var candidate in selected)
+                {
+                    try { _recovery.MoveToRecovery(candidate); succeeded++; }
+                    catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
+                        or InvalidOperationException or System.Security.SecurityException)
+                    { failures.Add($"{Path.GetFileName(candidate.FullPath)}: {ex.Message}"); }
+                }
+            });
+            RefreshRecoveryItems();
+            StatusInfo.Severity = failures.Count > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success;
+            StatusInfo.Title = "Recovery operation complete";
+            StatusInfo.Message = $"{succeeded:N0} file(s) moved to Recovery; {failures.Count:N0} skipped. "
+                + (failures.Count > 0 ? string.Join(" | ", failures.Take(2)) : "No files were deleted.");
+            StatusInfo.IsOpen = true;
+        }
+        catch (Exception ex)
+        {
+            StatusInfo.Severity = InfoBarSeverity.Error;
+            StatusInfo.Title = "Recovery operation interrupted";
+            StatusInfo.Message = ex.Message;
+            StatusInfo.IsOpen = true;
+        }
+        finally
+        {
+            SetCleanupBusy(false);
+            await RefreshTemporaryCandidatesAsync();
+            RefreshRecoveryItems();
+        }
+    }
+
+    private async void Restore_Click(object sender, RoutedEventArgs e)
+    {
+        if (_cleanupBusy || RecoveryList.SelectedItem is not RecoveryRow row) return;
+        SetCleanupBusy(true);
+        try
+        {
+            await Task.Run(() => _recovery.Restore(row.Item.Id));
+            StatusInfo.Severity = InfoBarSeverity.Success;
+            StatusInfo.Title = "File restored";
+            StatusInfo.Message = "The file was moved back to its original temporary folder without overwriting anything.";
+        }
+        catch (Exception ex)
+        {
+            StatusInfo.Severity = InfoBarSeverity.Warning;
+            StatusInfo.Title = "Restore did not complete";
+            StatusInfo.Message = ex.Message;
+        }
+        finally
+        {
+            StatusInfo.IsOpen = true;
+            SetCleanupBusy(false);
+            RefreshRecoveryItems();
+            await RefreshTemporaryCandidatesAsync();
+        }
+    }
+
+    private async void Purge_Click(object sender, RoutedEventArgs e)
+    {
+        if (_cleanupBusy || RecoveryList.SelectedItem is not RecoveryRow row) return;
+        if (!await AskConfirmationAsync("Permanently delete this recovery file",
+            $"{row.Name}\nOriginal: {row.OriginalPath}\n\n"
+            + "This permanently deletes only this selected Recovery payload. "
+            + "It does NOT move it to the Recycle Bin and cannot be undone.",
+            "Delete permanently")) return;
+
+        SetCleanupBusy(true);
+        try
+        {
+            var bytes = await Task.Run(() => _recovery.PurgeFromRecovery(row.Item.Id));
+            StatusInfo.Severity = InfoBarSeverity.Success;
+            StatusInfo.Title = "Recovery item deleted";
+            StatusInfo.Message = $"Permanently deleted the selected payload ({Formatting.Bytes(bytes)}). "
+                + "Actual free space depends on the filesystem.";
+        }
+        catch (Exception ex)
+        {
+            StatusInfo.Severity = InfoBarSeverity.Warning;
+            StatusInfo.Title = "Deletion was not completed";
+            StatusInfo.Message = ex.Message;
+        }
+        finally
+        {
+            StatusInfo.IsOpen = true;
+            SetCleanupBusy(false);
+            RefreshRecoveryItems();
+            await RefreshTemporaryCandidatesAsync();
+        }
+    }
+
+    private async void OpenWindowsUninstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (AppList.SelectedItem is not AppRow row || row.App.IsProtected) return;
+        if (!await AskConfirmationAsync("Review uninstall in Windows",
+            $"{row.Name}\n\nSmartClean has NOT verified all dependency relationships. "
+            + "Windows will perform the actual uninstall, if you choose it there. "
+            + "SmartClean will never execute a command stored in the uninstall registry.",
+            "Open Windows Settings")) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo("ms-settings:appsfeatures") { UseShellExecute = true });
+            StatusInfo.Severity = InfoBarSeverity.Informational;
+            StatusInfo.Title = "Windows Settings opened";
+            StatusInfo.Message = "Locate the application by name, review its effects, and uninstall there if appropriate.";
+            StatusInfo.IsOpen = true;
+        }
+        catch (Exception ex)
+        {
+            StatusInfo.Severity = InfoBarSeverity.Warning;
+            StatusInfo.Title = "Could not open Windows Settings";
+            StatusInfo.Message = ex.Message;
+            StatusInfo.IsOpen = true;
+        }
     }
 
     private void ThemePicker_SelectionChanged(object sender, SelectionChangedEventArgs e)
