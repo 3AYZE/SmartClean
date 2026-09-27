@@ -1,7 +1,5 @@
 name: Build and release Windows EXE
 on:
-  push:
-    branches: [ main ]
   workflow_dispatch:
 permissions:
   contents: write
@@ -37,7 +35,7 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $version = "0.2.0.${{ github.run_number }}"
+          $version = "0.3.0.${{ github.run_number }}"
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
       - name: Restore
@@ -79,4 +77,4 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ steps.version.outputs.tag }}" "output/releases/SmartClean-Setup.exe" --target (git rev-parse HEAD) --title "SmartClean ${{ steps.version.outputs.tag }}" --notes "Read-only SmartClean preview. Download SmartClean-Setup.exe to install or update. Files and applications are never removed by this preview."
+          gh release create "${{ steps.version.outputs.tag }}" "output/releases/SmartClean-Setup.exe" --target (git rev-parse HEAD) --title "SmartClean ${{ steps.version.outputs.tag }}" --notes "SmartClean reviewed temporary-file recovery and Windows-managed application uninstall. One EXE installer; explicit user approval required for cleanup. Source pushes no longer create releases."
