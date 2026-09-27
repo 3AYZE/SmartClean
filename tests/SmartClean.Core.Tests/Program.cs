@@ -134,6 +134,8 @@ var publicMethods = typeof(ScanCoordinator).Assembly.GetExportedTypes()
                                  | System.Reflection.BindingFlags.Static
                                  | System.Reflection.BindingFlags.Instance
                                  | System.Reflection.BindingFlags.DeclaredOnly))
+    // Record properties such as get_UninstallCommand are data, not destructive actions.
+    .Where(m => !m.IsSpecialName)
     .Select(m => m.Name).ToArray();
 Check(!publicMethods.Any(m => m.Contains("Delete", StringComparison.OrdinalIgnoreCase)
     || m.Contains("Uninstall", StringComparison.OrdinalIgnoreCase)
