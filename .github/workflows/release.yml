@@ -25,6 +25,7 @@ jobs:
             Remove-Item -Force 'SmartClean-bootstrap.zip'
             git config user.name 'github-actions[bot]'
             git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git checkout -- .github/workflows/release.yml
             git add -A
             git commit -m 'Import full SmartClean source from initial upload'
             git push origin HEAD:main
