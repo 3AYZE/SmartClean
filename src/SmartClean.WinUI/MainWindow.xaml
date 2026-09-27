@@ -232,7 +232,7 @@
                                 BorderThickness="1" CornerRadius="12" Padding="20">
                             <StackPanel Spacing="8">
                                 <TextBlock Text="How to interpret the findings" FontWeight="SemiBold" />
-                                <TextBlock Text="Downloads contain personal files, even when they are old. Temporary folders may include files used by running applications. This version reports sizes only; it cannot approve deletion."
+                                <TextBlock Text="Downloads contain personal files, even when old. Temporary folders may include files still in use. Folder totals are estimates; review eligible individual temporary files separately in Cleanup."
                                            TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
