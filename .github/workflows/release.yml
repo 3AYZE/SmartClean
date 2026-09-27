@@ -1,0 +1,81 @@
+name: Build and release Windows EXE
+on:
+  push:
+    branches: [ main ]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: smartclean-release
+  cancel-in-progress: false
+jobs:
+  build-release:
+    runs-on: windows-2022
+    timeout-minutes: 45
+    steps:
+      - uses: actions/checkout@v4
+      # First repository upload contains base64-encoded bootstrap source chunks.
+      # Expand and commit ordinary, browsable source once. Later pushes build the real source directly.
+      - name: Expand first-source bootstrap
+        shell: pwsh
+        run: |
+          if (!(Test-Path 'src/SmartClean.WinUI/SmartClean.WinUI.csproj')) {
+            if (!(Test-Path 'SmartClean-bootstrap.zip')) { throw 'Initial source archive missing.' }
+            Expand-Archive -LiteralPath 'SmartClean-bootstrap.zip' -DestinationPath . -Force
+            Remove-Item -Force 'SmartClean-bootstrap.zip'
+            git config user.name 'github-actions[bot]'
+            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+            git add -A
+            git commit -m 'Import full SmartClean source from initial upload'
+            git push origin HEAD:main
+          }
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: 10.0.x
+      - name: Set release version
+        id: version
+        shell: pwsh
+        run: |
+          $version = "0.2.0.${{ github.run_number }}"
+          "version=$version" >> $env:GITHUB_OUTPUT
+          "tag=v$version" >> $env:GITHUB_OUTPUT
+      - name: Restore
+        shell: pwsh
+        run: >-
+          dotnet restore src/SmartClean.WinUI/SmartClean.WinUI.csproj
+          --configfile NuGet.Config -r win-x64 -p:SmartCleanTargetFramework=net10.0
+          -p:Platform=x64 -p:EnableMsixTooling=true -p:WindowsAppSDKSelfContained=true
+          -p:SelfContained=true
+      - name: Test core safeguards
+        shell: pwsh
+        run: >-
+          dotnet run --project tests/SmartClean.Core.Tests/SmartClean.Core.Tests.csproj
+          --configuration Release -p:SmartCleanTargetFramework=net10.0
+      - name: Publish unpackaged WinUI
+        shell: pwsh
+        run: >-
+          dotnet publish src/SmartClean.WinUI/SmartClean.WinUI.csproj
+          --no-restore --configuration Release --runtime win-x64 --self-contained true
+          -p:SmartCleanTargetFramework=net10.0 -p:Platform=x64 -p:EnableMsixTooling=true
+          -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false -p:PublishAot=false
+          -p:PublishReadyToRun=false -p:PublishSingleFile=false
+          -p:Version=${{ steps.version.outputs.version }}
+          --output output/SmartClean-win-x64
+      - name: Install Inno Setup
+        shell: pwsh
+        run: choco install innosetup --no-progress -y
+      - name: Create single EXE installer
+        shell: pwsh
+        run: |
+          $iscc = "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe"
+          if (!(Test-Path $iscc)) { throw "Inno Setup was not installed at: $iscc" }
+          $publish = (Resolve-Path "output/SmartClean-win-x64").Path
+          & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" "/DBuildOutput=$publish" "installer/SmartClean.iss"
+          if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
+          if (!(Test-Path "output/releases/SmartClean-Setup.exe")) { throw "Installer not created" }
+      - name: Publish ONE release asset
+        shell: pwsh
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh release create "${{ steps.version.outputs.tag }}" "output/releases/SmartClean-Setup.exe" --target (git rev-parse HEAD) --title "SmartClean ${{ steps.version.outputs.tag }}" --notes "Read-only SmartClean preview. Download SmartClean-Setup.exe to install or update. Files and applications are never removed by this preview."
