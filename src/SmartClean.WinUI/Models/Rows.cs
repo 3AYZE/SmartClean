@@ -35,6 +35,19 @@ public sealed class TempCandidateRow
     public TempCandidateRow(TempCandidate candidate) => Candidate = candidate;
 }
 
+public sealed class TempExcludedRow
+{
+    public TempExcludedFile File { get; }
+    public string Name => System.IO.Path.GetFileName(File.FullPath);
+    public string Location => File.FullPath;
+    public string Reason => File.Reason;
+    public string Detail => File.LastWriteUtc == DateTime.MinValue
+        ? "Metadata unavailable"
+        : $"Modified {File.LastWriteUtc.ToLocalTime():MMM d, yyyy}";
+    public string Size => Formatting.Bytes(File.Bytes);
+    public TempExcludedRow(TempExcludedFile file) => File = file;
+}
+
 public sealed class RecoveryRow
 {
     public RecoveryItem Item { get; }

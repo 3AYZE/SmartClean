@@ -239,21 +239,23 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- BOUNDED TEMPORARY-FILE CLEANUP -->
+                <!-- REVIEWED TEMPORARY-FILE CLEANUP -->
                 <ScrollViewer x:Name="CleanupView" Grid.Row="1" Visibility="Collapsed">
                     <StackPanel MaxWidth="1010" HorizontalAlignment="Stretch" Padding="28,22,28,42" Spacing="16">
                         <TextBlock Text="Cleanup" Style="{StaticResource TitleTextBlockStyle}" />
-                        <TextBlock Text="Only top-level .tmp and .temp files in your own temporary folder, unchanged for at least 30 days, are eligible. Nothing is removed automatically."
+                        <TextBlock Text="Inspect the files SmartClean found, choose exactly what to keep or move, and review the list again before making changes. Nothing is selected or deleted automatically."
                                    TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
                         <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
                                 BorderThickness="1" CornerRadius="12" Padding="20">
                             <StackPanel Spacing="13">
-                                <TextBlock Text="Temporary-file candidates" FontSize="17" FontWeight="SemiBold" />
-                                <TextBlock x:Name="CleanupSummary" Text="Scan your computer to find eligible temporary files."
+                                <TextBlock Text="Eligible temporary files" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock Text="Only regular .tmp, .temp, .log and .dmp files directly inside your temporary folder, unchanged for at least 30 days, can be moved to Recovery."
                                            Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
-                                <TextBlock Text="Moving a file to Recovery does NOT free disk space. Restore it if needed, or separately approve permanent deletion from Recovery."
+                                <TextBlock x:Name="CleanupSummary" Text="Scan to view eligible files, their sizes and why other files are excluded."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <TextBlock Text="Check the files you want to review. Keeping everything unselected is always allowed."
                                            FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
-                                <ListView x:Name="TempCandidateList" SelectionMode="Multiple" MaxHeight="320"
+                                <ListView x:Name="TempCandidateList" SelectionMode="Multiple" MaxHeight="360"
                                           SelectionChanged="TempCandidateList_SelectionChanged">
                                     <ListView.ItemTemplate>
                                         <DataTemplate x:DataType="models:TempCandidateRow">
@@ -270,39 +272,70 @@
                                         </DataTemplate>
                                     </ListView.ItemTemplate>
                                 </ListView>
+                                <TextBlock x:Name="CandidateSelectionSummary" Text="Selected: 0 files · 0 B" FontWeight="SemiBold"
+                                           TextWrapping="Wrap" />
                                 <StackPanel Orientation="Horizontal" Spacing="10">
-                                    <Button x:Name="CleanupRefreshButton" Content="Rescan temporary files" Click="CleanupRefresh_Click" />
-                                    <Button x:Name="MoveTempButton" Content="Move selected to Recovery" IsEnabled="False"
+                                    <Button x:Name="CleanupRefreshButton" Content="Rescan" Click="CleanupRefresh_Click" />
+                                    <Button x:Name="MoveTempButton" Content="Review selected files" IsEnabled="False"
                                             Click="MoveTemp_Click" Style="{StaticResource AccentButtonStyle}" />
                                 </StackPanel>
+                                <TextBlock Text="Moving files to Recovery is reversible but does NOT free storage. You can permanently delete individual Recovery files after a second review."
+                                           FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
+
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Excluded files (read-only)" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock x:Name="ExcludedReasonSummary" Text="Scan to see why files were not eligible. Excluded files cannot be selected for cleanup."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <ListView x:Name="ExcludedTempList" SelectionMode="None" MaxHeight="240">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:TempExcludedRow">
+                                            <Grid ColumnSpacing="14" Padding="3,7">
+                                                <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
+                                                <StackPanel Spacing="3">
+                                                    <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextTrimming="CharacterEllipsis" />
+                                                    <TextBlock Text="{x:Bind Reason}" FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                                    <TextBlock Text="{x:Bind Location}" FontSize="11" Foreground="{ThemeResource SmartSubtleText}" TextTrimming="CharacterEllipsis" />
+                                                </StackPanel>
+                                                <TextBlock Grid.Column="1" Text="{x:Bind Size}" VerticalAlignment="Center" />
+                                            </Grid>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                                <TextBlock Text="Only the current folder's top-level files are inspected. Nested app folders, Downloads and shared components are never offered for deletion here."
+                                           FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
                         <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
                                 BorderThickness="1" CornerRadius="12" Padding="20">
                             <StackPanel Spacing="13">
-                                <TextBlock Text="Recovery" FontSize="17" FontWeight="SemiBold" />
-                                <TextBlock x:Name="RecoverySummary" Text="Recovery items appear here after a file is moved."
+                                <TextBlock Text="Recovery — final deletion list" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock x:Name="RecoverySummary" Text="Files moved into Recovery appear here. Select individual files to restore or permanently delete."
                                            Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
-                                <ListView x:Name="RecoveryList" SelectionMode="Single" MaxHeight="290"
+                                <ListView x:Name="RecoveryList" SelectionMode="Multiple" MaxHeight="320"
                                           SelectionChanged="RecoveryList_SelectionChanged">
                                     <ListView.ItemTemplate>
                                         <DataTemplate x:DataType="models:RecoveryRow">
                                             <StackPanel Spacing="4" Padding="3,7">
                                                 <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" />
-                                                <TextBlock Text="{x:Bind Detail}" FontSize="12"
-                                                           Foreground="{ThemeResource SmartSubtleText}" />
+                                                <TextBlock Text="{x:Bind Detail}" FontSize="12" Foreground="{ThemeResource SmartSubtleText}" />
                                                 <TextBlock Text="{x:Bind OriginalPath}" FontSize="11" TextTrimming="CharacterEllipsis"
                                                            Foreground="{ThemeResource SmartSubtleText}" />
                                             </StackPanel>
                                         </DataTemplate>
                                     </ListView.ItemTemplate>
                                 </ListView>
+                                <TextBlock x:Name="RecoverySelectionSummary" Text="Selected: 0 recovery files · 0 B" FontWeight="SemiBold" />
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <Button x:Name="RestoreButton" Content="Restore selected" IsEnabled="False" Click="Restore_Click" />
-                                    <Button x:Name="PurgeButton" Content="Delete selected permanently" IsEnabled="False"
+                                    <Button x:Name="PurgeButton" Content="Review selected for permanent deletion" IsEnabled="False"
                                             Click="Purge_Click" />
                                 </StackPanel>
-                                <TextBlock Text="Deleting a recovery item is irreversible. No personal files, program folders, or shared runtimes are candidates."
+                                <TextBlock Text="Permanent deletion affects ONLY the files you choose in Recovery. A second review lists every filename, size and original path; you can deselect items or cancel."
                                            FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>

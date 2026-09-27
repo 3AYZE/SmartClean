@@ -92,9 +92,9 @@ public sealed partial class MainWindow : Window
             StatusInfo.Severity = snapshot.Warnings.Count > 0
                 ? InfoBarSeverity.Warning : InfoBarSeverity.Success;
             StatusInfo.Title = snapshot.Warnings.Count > 0
-                ? "Some folder totals are partial" : "Scan complete";
+                ? "Some folder entries were skipped" : "Scan complete";
             StatusInfo.Message = snapshot.Warnings.Count > 0
-                ? $"{snapshot.Warnings.Count} storage scan limitation(s). See Protection for the affected folders. Nothing was changed."
+                ? $"{snapshot.Warnings.Count} folder notice(s): linked paths and unreadable files can be excluded. See Protection for the affected folders. Nothing was changed."
                 : "Inventory and temporary-file candidates are ready. No files were changed.";
             StatusInfo.IsOpen = snapshot.Warnings.Count > 0;
         }
@@ -214,23 +214,36 @@ public sealed partial class MainWindow : Window
     {
         if (_cleanupBusy) return;
         CleanupRefreshButton.IsEnabled = false;
-        CleanupSummary.Text = "Checking eligible top-level temporary files...";
+        CleanupSummary.Text = "Inspecting files in your temporary folder...";
         try
         {
             var scan = await Task.Run(() => _recovery.FindCandidates());
-            TempCandidateList.ItemsSource = scan.Items
-                .Select(x => new TempCandidateRow(x)).ToArray();
+            TempCandidateList.ItemsSource = scan.Items.Select(x => new TempCandidateRow(x)).ToArray();
+            ExcludedTempList.ItemsSource = scan.ExcludedFiles.Select(x => new TempExcludedRow(x)).ToArray();
             var bytes = scan.Items.Sum(x => x.Bytes);
             CleanupSummary.Text = scan.UnavailableReason is not null
                 ? scan.UnavailableReason
-                : $"{scan.Items.Count:N0} candidates · {Formatting.Bytes(bytes)} in Recovery if moved. "
-                  + "This is not free space until you permanently delete reviewed recovery items."
-                  + (scan.LimitReached ? " Candidate limit reached; results are incomplete." : "")
-                  + (scan.Skipped > 0 ? $" {scan.Skipped:N0} other entries were excluded or unreadable." : "");
+                : $"{scan.Items.Count:N0} eligible files ({Formatting.Bytes(bytes)}) among "
+                  + $"{scan.InspectedEntries:N0} inspected top-level files. "
+                  + (scan.Items.Count == 0
+                      ? "No files currently meet the strict age and type requirements. See exclusions below."
+                      : "Select only the files you want to review for Recovery.")
+                  + (scan.LimitReached ? " Scan limit reached; some files were not inspected." : "");
+            ExcludedReasonSummary.Text = scan.UnavailableReason is not null
+                ? "No excluded-file list is available until the temporary folder can be scanned."
+                : scan.Skipped == 0
+                    ? "No exclusions were reported."
+                    : $"{scan.Skipped:N0} excluded or unreadable entries: "
+                      + string.Join(" · ", scan.ExclusionReasons.OrderByDescending(x => x.Value)
+                          .Select(x => $"{x.Value:N0} {x.Key}"))
+                      + (scan.Skipped > scan.ExcludedFiles.Count
+                          ? $". Displaying {scan.ExcludedFiles.Count:N0} examples."
+                          : ".");
         }
         catch (Exception ex)
         {
-            CleanupSummary.Text = "Temporary-file scan was unsuccessful: " + ex.Message;
+            CleanupSummary.Text = "Temporary-file inspection failed: " + ex.Message;
+            ExcludedReasonSummary.Text = "The exclusion list could not be updated.";
             StartupDiagnostics.Record("Cleanup discovery: " + ex);
         }
         finally
@@ -247,8 +260,9 @@ public sealed partial class MainWindow : Window
             var items = _recovery.ListRecovery();
             RecoveryList.ItemsSource = items.Select(x => new RecoveryRow(x)).ToArray();
             RecoverySummary.Text = items.Count == 0
-                ? "No files are currently held in Recovery."
-                : $"{items.Count:N0} recoverable file(s) · {Formatting.Bytes(items.Sum(x => x.Bytes))} still stored on disk.";
+                ? "Recovery is empty. Moving files here does not free disk space."
+                : $"{items.Count:N0} recoverable files · {Formatting.Bytes(items.Sum(x => x.Bytes))} still stored on disk. "
+                  + "Select the ones you want to restore or review for permanent deletion.";
         }
         catch (Exception ex)
         {
@@ -258,15 +272,21 @@ public sealed partial class MainWindow : Window
         RecoveryList_SelectionChanged(this, null!);
     }
 
-    private void TempCandidateList_SelectionChanged(object sender, SelectionChangedEventArgs e) =>
-        MoveTempButton.IsEnabled = !_cleanupBusy
-            && TempCandidateList.SelectedItems.Count > 0;
+    private void TempCandidateList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        var selected = TempCandidateList.SelectedItems.OfType<TempCandidateRow>().ToArray();
+        MoveTempButton.IsEnabled = !_cleanupBusy && selected.Length > 0;
+        CandidateSelectionSummary.Text = $"Selected: {selected.Length:N0} files · "
+            + Formatting.Bytes(selected.Sum(x => x.Candidate.Bytes));
+    }
 
     private void RecoveryList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
-        var valid = !_cleanupBusy && RecoveryList.SelectedItem is RecoveryRow;
-        RestoreButton.IsEnabled = valid;
-        PurgeButton.IsEnabled = valid;
+        var selected = RecoveryList.SelectedItems.OfType<RecoveryRow>().ToArray();
+        RestoreButton.IsEnabled = !_cleanupBusy && selected.Length > 0;
+        PurgeButton.IsEnabled = !_cleanupBusy && selected.Length > 0;
+        RecoverySelectionSummary.Text = $"Selected: {selected.Length:N0} recovery files · "
+            + Formatting.Bytes(selected.Sum(x => x.Item.Bytes));
     }
 
     private async Task<bool> AskConfirmationAsync(string title, string message, string approve)
@@ -283,10 +303,68 @@ public sealed partial class MainWindow : Window
         return await dialog.ShowAsync() == ContentDialogResult.Primary;
     }
 
+    // A second review displays the COMPLETE selected file list, filenames,
+    // original paths, and sizes. The user can uncheck any item or cancel.
+    private async Task<T[]> ReviewExactFilesAsync<T>(string title, string explanation,
+        IReadOnlyList<T> selected, Func<T, string> name, Func<T, string> path,
+        Func<T, long> size, string approve)
+    {
+        if (selected.Count == 0) return [];
+        var container = new StackPanel { Spacing = 10 };
+        container.Children.Add(new TextBlock
+        {
+            Text = explanation,
+            TextWrapping = TextWrapping.Wrap
+        });
+        var chosen = new List<(T Value, CheckBox Toggle)>(selected.Count);
+        foreach (var entry in selected)
+        {
+            var toggle = new CheckBox
+            {
+                IsChecked = true,
+                HorizontalAlignment = HorizontalAlignment.Stretch
+            };
+            var lines = new StackPanel { Spacing = 2 };
+            lines.Children.Add(new TextBlock
+            {
+                Text = name(entry) + " · " + Formatting.Bytes(size(entry)),
+                TextWrapping = TextWrapping.Wrap
+            });
+            lines.Children.Add(new TextBlock
+            {
+                Text = path(entry),
+                TextWrapping = TextWrapping.Wrap,
+                FontSize = 12,
+                Opacity = 0.75
+            });
+            toggle.Content = lines;
+            container.Children.Add(toggle);
+            chosen.Add((entry, toggle));
+        }
+        var dialog = new ContentDialog
+        {
+            XamlRoot = RootGrid.XamlRoot,
+            Title = title,
+            Content = new ScrollViewer
+            {
+                Content = container,
+                MaxHeight = 360,
+                VerticalScrollBarVisibility = ScrollBarVisibility.Auto
+            },
+            PrimaryButtonText = approve,
+            CloseButtonText = "Cancel",
+            DefaultButton = ContentDialogButton.Close
+        };
+        if (await dialog.ShowAsync() != ContentDialogResult.Primary) return [];
+        return chosen.Where(x => x.Toggle.IsChecked is true).Select(x => x.Value).ToArray();
+    }
+
     private void SetCleanupBusy(bool busy)
     {
         _cleanupBusy = busy;
         CleanupRefreshButton.IsEnabled = !busy;
+        TempCandidateList.IsEnabled = !busy;
+        RecoveryList.IsEnabled = !busy;
         TempCandidateList_SelectionChanged(this, null!);
         RecoveryList_SelectionChanged(this, null!);
     }
@@ -297,12 +375,16 @@ public sealed partial class MainWindow : Window
         var selected = TempCandidateList.SelectedItems.OfType<TempCandidateRow>()
             .Select(x => x.Candidate).ToArray();
         if (selected.Length == 0) return;
-        var total = selected.Sum(x => x.Bytes);
-        if (!await AskConfirmationAsync("Move temporary files to Recovery",
-            $"Move {selected.Length:N0} selected file(s) ({Formatting.Bytes(total)})? "
-            + "SmartClean will recheck each one and skip anything changed or in use. "
-            + "This action does not reclaim storage until you separately delete them from Recovery.",
-            "Move to Recovery")) return;
+        var approved = await ReviewExactFilesAsync(
+            "Review files to move into Recovery",
+            "Uncheck anything you want to keep. SmartClean revalidates each selected file. "
+            + "This move is reversible and does NOT free disk space.",
+            selected,
+            x => Path.GetFileName(x.FullPath),
+            x => x.FullPath,
+            x => x.Bytes,
+            "Move checked files");
+        if (approved.Length == 0) return;
         SetCleanupBusy(true);
         var succeeded = 0;
         var failures = new List<string>();
@@ -310,7 +392,7 @@ public sealed partial class MainWindow : Window
         {
             await Task.Run(() =>
             {
-                foreach (var candidate in selected)
+                foreach (var candidate in approved)
                 {
                     try { _recovery.MoveToRecovery(candidate); succeeded++; }
                     catch (Exception ex) when (ex is IOException or UnauthorizedAccessException
@@ -318,11 +400,10 @@ public sealed partial class MainWindow : Window
                     { failures.Add($"{Path.GetFileName(candidate.FullPath)}: {ex.Message}"); }
                 }
             });
-            RefreshRecoveryItems();
             StatusInfo.Severity = failures.Count > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success;
             StatusInfo.Title = "Recovery operation complete";
-            StatusInfo.Message = $"{succeeded:N0} file(s) moved to Recovery; {failures.Count:N0} skipped. "
-                + (failures.Count > 0 ? string.Join(" | ", failures.Take(2)) : "No files were deleted.");
+            StatusInfo.Message = $"{succeeded:N0} checked files moved; {failures.Count:N0} skipped. "
+                + (failures.Count > 0 ? string.Join(" | ", failures.Take(2)) : "Nothing has been permanently deleted.");
             StatusInfo.IsOpen = true;
         }
         catch (Exception ex)
@@ -331,30 +412,51 @@ public sealed partial class MainWindow : Window
             StatusInfo.Title = "Recovery operation interrupted";
             StatusInfo.Message = ex.Message;
             StatusInfo.IsOpen = true;
+            StartupDiagnostics.Record("Recovery move: " + ex);
         }
         finally
         {
             SetCleanupBusy(false);
-            await RefreshTemporaryCandidatesAsync();
             RefreshRecoveryItems();
+            await RefreshTemporaryCandidatesAsync();
         }
     }
 
     private async void Restore_Click(object sender, RoutedEventArgs e)
     {
-        if (_cleanupBusy || RecoveryList.SelectedItem is not RecoveryRow row) return;
+        if (_cleanupBusy) return;
+        var selected = RecoveryList.SelectedItems.OfType<RecoveryRow>().ToArray();
+        if (selected.Length == 0) return;
+        var approved = await ReviewExactFilesAsync(
+            "Restore selected files",
+            "Uncheck any files you do not want to restore. Existing files at the original path will never be overwritten.",
+            selected, x => x.Name, x => x.OriginalPath, x => x.Item.Bytes,
+            "Restore checked files");
+        if (approved.Length == 0) return;
         SetCleanupBusy(true);
+        var restored = 0;
+        var errors = new List<string>();
         try
         {
-            await Task.Run(() => _recovery.Restore(row.Item.Id));
-            StatusInfo.Severity = InfoBarSeverity.Success;
-            StatusInfo.Title = "File restored";
-            StatusInfo.Message = "The file was moved back to its original temporary folder without overwriting anything.";
+            await Task.Run(() =>
+            {
+                foreach (var row in approved)
+                {
+                    try { _recovery.Restore(row.Item.Id); restored++; }
+                    catch (Exception ex) when (ex is IOException or InvalidOperationException
+                        or UnauthorizedAccessException or System.Security.SecurityException)
+                    { errors.Add($"{row.Name}: {ex.Message}"); }
+                }
+            });
+            StatusInfo.Severity = errors.Count > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success;
+            StatusInfo.Title = "Restore review complete";
+            StatusInfo.Message = $"{restored:N0} files restored; {errors.Count:N0} could not be restored."
+                + (errors.Count > 0 ? " " + string.Join(" | ", errors.Take(2)) : "");
         }
         catch (Exception ex)
         {
-            StatusInfo.Severity = InfoBarSeverity.Warning;
-            StatusInfo.Title = "Restore did not complete";
+            StatusInfo.Severity = InfoBarSeverity.Error;
+            StatusInfo.Title = "Restore interrupted";
             StatusInfo.Message = ex.Message;
         }
         finally
@@ -368,26 +470,42 @@ public sealed partial class MainWindow : Window
 
     private async void Purge_Click(object sender, RoutedEventArgs e)
     {
-        if (_cleanupBusy || RecoveryList.SelectedItem is not RecoveryRow row) return;
-        if (!await AskConfirmationAsync("Permanently delete this recovery file",
-            $"{row.Name}\nOriginal: {row.OriginalPath}\n\n"
-            + "This permanently deletes only this selected Recovery payload. "
-            + "It does NOT move it to the Recycle Bin and cannot be undone.",
-            "Delete permanently")) return;
-
+        if (_cleanupBusy) return;
+        var selected = RecoveryList.SelectedItems.OfType<RecoveryRow>().ToArray();
+        if (selected.Length == 0) return;
+        var approved = await ReviewExactFilesAsync(
+            "Final deletion list — permanent",
+            "ONLY the checked Recovery payloads below will be permanently deleted. "
+            + "Uncheck anything to keep or restore. This cannot be undone, and files will NOT go to the Recycle Bin.",
+            selected, x => x.Name, x => x.OriginalPath, x => x.Item.Bytes,
+            "Delete checked permanently");
+        if (approved.Length == 0) return;
         SetCleanupBusy(true);
+        var deleted = 0;
+        long bytes = 0;
+        var failures = new List<string>();
         try
         {
-            var bytes = await Task.Run(() => _recovery.PurgeFromRecovery(row.Item.Id));
-            StatusInfo.Severity = InfoBarSeverity.Success;
-            StatusInfo.Title = "Recovery item deleted";
-            StatusInfo.Message = $"Permanently deleted the selected payload ({Formatting.Bytes(bytes)}). "
-                + "Actual free space depends on the filesystem.";
+            await Task.Run(() =>
+            {
+                foreach (var row in approved)
+                {
+                    try { bytes += _recovery.PurgeFromRecovery(row.Item.Id); deleted++; }
+                    catch (Exception ex) when (ex is IOException or InvalidOperationException
+                        or UnauthorizedAccessException or System.Security.SecurityException)
+                    { failures.Add($"{row.Name}: {ex.Message}"); }
+                }
+            });
+            StatusInfo.Severity = failures.Count > 0 ? InfoBarSeverity.Warning : InfoBarSeverity.Success;
+            StatusInfo.Title = "Permanent deletion review complete";
+            StatusInfo.Message = $"{deleted:N0} checked Recovery payloads deleted "
+                + $"({Formatting.Bytes(bytes)}); {failures.Count:N0} not deleted."
+                + (failures.Count > 0 ? " " + string.Join(" | ", failures.Take(2)) : "");
         }
         catch (Exception ex)
         {
-            StatusInfo.Severity = InfoBarSeverity.Warning;
-            StatusInfo.Title = "Deletion was not completed";
+            StatusInfo.Severity = InfoBarSeverity.Error;
+            StatusInfo.Title = "Permanent deletion interrupted";
             StatusInfo.Message = ex.Message;
         }
         finally

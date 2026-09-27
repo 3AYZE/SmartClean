@@ -8,8 +8,8 @@ SmartClean scans installed applications, explicit .NET runtime declarations, dri
 
 - **Overview:** app inventory, observed declarations, available space and a bounded folder scan. Folder errors identify affected folders.
 - **Applications:** search registered software, review known dependencies and open Windows Settings > Installed apps for a user-approved uninstall. SmartClean never executes uninstall strings from the registry.
-- **Cleanup:** only top-level .tmp and .temp files directly inside the current user's LOCAL temporary folder, last modified at least 30 days ago. Age does not prove that a file is unused: every move requires selection and confirmation.
-- **Recovery:** move each eligible, revalidated selected candidate into a dedicated per-user vault on the same volume, journaling the original path before the move. Restore without overwriting existing files. Permanently delete only a specifically selected stored payload after another confirmation.
+- **Cleanup:** inspect regular top-level .tmp, .temp, .log and .dmp files in your own LOCAL temporary folder. Eligible files must be at least 30 days old. The page shows eligible file names, locations, dates and sizes, plus read-only examples and counts for excluded files with specific reasons. Users select items, see the full review list, can uncheck individual entries and confirm before any move. No automatic removal.
+- **Recovery:** move only reviewed and revalidated candidates into a per-user vault on the same volume, journaling the original path. Select which Recovery files to restore or delete. The final deletion dialog lists every chosen file, original path and size, permits individual deselection, and requires explicit confirmation. Existing files are never overwritten on restore.
 - **Protection:** mandatory safeguards for shared runtimes, personal folders, linked paths and unknown dependencies. Ordinary scans do not require elevation.
 - **Settings:** native light/dark theme, installed version and reviewed, hash-checked GitHub release updates.
 
@@ -30,6 +30,6 @@ Run Test-Core-Windows.cmd to exercise runtime protection, bounded folder travers
 
 ## Security scope
 
-File cleanup is limited to the user's local temp root, without descending into subfolders or automatically deleting personal data. Metadata is rechecked before each move. Recovery is journaled and refuses overwrite. See docs/SECURITY.md for limitations and acceptance tests.
+Cleanup candidates remain limited to the user's local temp root and an explicit allowlist; the excluded-file list is read-only and cannot bypass those rules. No subfolders are traversed or personal data automatically deleted. Metadata is rechecked before each move. Recovery is journaled and refuses overwrite. See docs/SECURITY.md for limitations and acceptance tests.
 
 The project is in development. Passing CI establishes core behavior and Windows compilation, not interactive GUI, accessibility or long-duration desktop reliability.

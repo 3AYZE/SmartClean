@@ -3,11 +3,19 @@ using System.Text.Json;
 namespace SmartClean.Core.Cleanup;
 
 // Deliberately narrow cleanup scope: ordinary files at the TOP LEVEL of the
-// CURRENT USER's temporary directory, with known temporary extensions, at
-// least 30 days since last modification. No recursive deletion or app folders.
+// CURRENT USER's temporary directory, with selected temporary-file extensions,
+// at least 30 days since last modification. No recursive deletion or app folders.
 public sealed record TempCandidate(string FullPath, long Bytes, DateTime LastWriteUtc);
+public sealed record TempExcludedFile(string FullPath, long Bytes, DateTime LastWriteUtc, string Reason);
 public sealed record TempCandidateScan(
-    IReadOnlyList<TempCandidate> Items, int Skipped, bool LimitReached, string? UnavailableReason);
+    IReadOnlyList<TempCandidate> Items, int Skipped, bool LimitReached, string? UnavailableReason)
+{
+    // File names and metadata only. Excluded files are never passed to removal methods.
+    public IReadOnlyList<TempExcludedFile> ExcludedFiles { get; init; } = [];
+    public IReadOnlyDictionary<string, int> ExclusionReasons { get; init; }
+        = new Dictionary<string, int>();
+    public int InspectedEntries { get; init; }
+}
 public sealed record RecoveryItem(
     string Id, string OriginalPath, long Bytes, DateTimeOffset MovedAtUtc, string State);
 
@@ -16,11 +24,12 @@ public sealed class TempRecoveryManager
     private const int MinAgeDays = 30;
     private const int MaxEntries = 15_000;
     private const int MaxCandidates = 300;
+    private const int MaxExcludedPreview = 250;
     private const long MaxCandidateBytes = 1_073_741_824; // Limit a single move to 1 GiB.
     private const string JournalName = "journal.json";
     private const string PayloadName = "temporary-file.bin";
     private static readonly HashSet<string> Extensions =
-        new(StringComparer.OrdinalIgnoreCase) { ".tmp", ".temp" };
+        new(StringComparer.OrdinalIgnoreCase) { ".tmp", ".temp", ".log", ".dmp" };
 
     private readonly string _tempRoot;
     private readonly string _vaultRoot;
@@ -52,41 +61,75 @@ public sealed class TempRecoveryManager
             return new TempCandidateScan([], 0, false, unsupported);
 
         var found = new List<TempCandidate>();
+        var excluded = new List<TempExcludedFile>();
+        var reasons = new SortedDictionary<string, int>(StringComparer.OrdinalIgnoreCase);
         var skipped = 0;
         var visited = 0;
         var limitReached = false;
+        void RecordReason(string reason)
+        {
+            skipped++;
+            reasons[reason] = reasons.TryGetValue(reason, out var n) ? n + 1 : 1;
+        }
+
         try
         {
-            // Top-level only: never enumerate an application's private
-            // subdirectory, a junction or a user-selected folder.
+            // Only top-level regular files. Directories, including reparse-point
+            // folders, are never traversed or presented as deletion candidates.
             foreach (var path in Directory.EnumerateFiles(_tempRoot, "*", SearchOption.TopDirectoryOnly))
             {
                 token.ThrowIfCancellationRequested();
-                if (++visited > MaxEntries || found.Count >= MaxCandidates)
+                if (visited >= MaxEntries)
                 {
                     limitReached = true;
                     break;
                 }
+                visited++;
                 try
                 {
-                    if (!IsCandidatePath(path)) { skipped++; continue; }
                     var info = new FileInfo(path);
+                    var reason = GetExclusionReason(path, info);
+                    if (reason is null && found.Count >= MaxCandidates)
+                        reason = "Candidate display limit reached";
+                    if (reason is not null)
+                    {
+                        RecordReason(reason);
+                        if (excluded.Count < MaxExcludedPreview)
+                            excluded.Add(new TempExcludedFile(info.FullName, info.Length,
+                                info.LastWriteTimeUtc, reason));
+                        continue;
+                    }
                     found.Add(new TempCandidate(info.FullName, info.Length, info.LastWriteTimeUtc));
                 }
                 catch (Exception e) when (e is IOException or UnauthorizedAccessException
                     or System.Security.SecurityException or PathTooLongException)
-                { skipped++; }
+                {
+                    RecordReason("Unreadable file metadata");
+                    if (excluded.Count < MaxExcludedPreview)
+                        excluded.Add(new TempExcludedFile(path, 0, DateTime.MinValue,
+                            "Unreadable file metadata"));
+                }
             }
         }
         catch (Exception e) when (e is IOException or UnauthorizedAccessException
             or System.Security.SecurityException or DirectoryNotFoundException)
         {
             return new TempCandidateScan(found, skipped + 1, limitReached,
-                "The temporary folder could not be read completely: " + e.Message);
+                "The temporary folder could not be read completely: " + e.Message)
+            {
+                ExcludedFiles = excluded,
+                ExclusionReasons = reasons,
+                InspectedEntries = visited
+            };
         }
 
         return new TempCandidateScan(
-            found.OrderByDescending(x => x.Bytes).ToArray(), skipped, limitReached, null);
+            found.OrderByDescending(x => x.Bytes).ToArray(), skipped, limitReached, null)
+        {
+            ExcludedFiles = excluded.OrderByDescending(x => x.Bytes).ToArray(),
+            ExclusionReasons = reasons,
+            InspectedEntries = visited
+        };
     }
 
     public RecoveryItem MoveToRecovery(TempCandidate candidate)
@@ -239,12 +282,23 @@ public sealed class TempRecoveryManager
     private bool IsCandidatePath(string path)
     {
         if (!IsUnderTempRoot(path) || IsLinked(path)) return false;
-        var info = new FileInfo(path);
-        if (!info.Exists || (info.Attributes &
-            (FileAttributes.System | FileAttributes.Hidden | FileAttributes.ReadOnly |
-             FileAttributes.ReparsePoint | FileAttributes.Directory)) != 0) return false;
-        return info.Length is > 0 and <= MaxCandidateBytes
-               && info.LastWriteTimeUtc < DateTime.UtcNow.AddDays(-MinAgeDays);
+        return GetExclusionReason(path, new FileInfo(path)) is null;
+    }
+
+    private string? GetExclusionReason(string path, FileInfo info)
+    {
+        if (!IsUnderTempRoot(path)) return "Not a supported temporary-file type (.tmp, .temp, .log, .dmp)";
+        if (!info.Exists) return "File no longer exists";
+        if ((info.Attributes & FileAttributes.ReparsePoint) != 0)
+            return "Linked file — protected";
+        if ((info.Attributes & (FileAttributes.System | FileAttributes.Hidden |
+                                 FileAttributes.ReadOnly | FileAttributes.Directory)) != 0)
+            return "Protected file attributes";
+        if (info.Length <= 0) return "Empty file — no storage to recover";
+        if (info.Length > MaxCandidateBytes) return "Larger than the 1 GiB per-file limit";
+        if (info.LastWriteTimeUtc >= DateTime.UtcNow.AddDays(-MinAgeDays))
+            return "Modified within the last 30 days";
+        return null;
     }
 
     private static string Canonical(string path) => Path.GetFullPath(path)

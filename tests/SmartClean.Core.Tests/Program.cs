@@ -153,6 +153,17 @@ try
     var found = cleaner.FindCandidates();
     Check(found.Items.Count == 1 && found.Items[0].FullPath == aged,
         "Only old, top-level temporary files qualify; documents and subfolders protected");
+    Check(found.InspectedEntries == 3 && found.Skipped == 2
+        && found.ExcludedFiles.Count == 2,
+        "Excluded top-level files remain visible in read-only inspection with no subfolder traversal");
+    Check(found.ExclusionReasons.TryGetValue("Modified within the last 30 days", out var recentExclusions)
+        && recentExclusions == 1
+        && found.ExclusionReasons.TryGetValue(
+            "Not a supported temporary-file type (.tmp, .temp, .log, .dmp)", out var unsupportedExclusions)
+        && unsupportedExclusions == 1,
+        "Excluded files include specific reasons rather than one generic skipped count");
+    Check(found.ExcludedFiles.All(x => x.FullPath != nestedFile),
+        "Nested application data stays outside the deletion and excluded-file previews");
 
     var candidate = found.Items[0];
     File.AppendAllText(aged, "changed");
@@ -192,6 +203,24 @@ try
     }
     catch (ArgumentException) { Check(true, "Invalid recovery identifier blocked"); }
 
+    var oldLog = Path.Combine(tempFixture, "diagnostic.log");
+    var oldDump = Path.Combine(tempFixture, "old-crash.dmp");
+    File.WriteAllText(oldLog, "test log");
+    File.WriteAllText(oldDump, "test minidump");
+    File.SetLastWriteTimeUtc(oldLog, oldDate);
+    File.SetLastWriteTimeUtc(oldDump, oldDate);
+    var expanded = cleaner.FindCandidates();
+    Check(expanded.Items.Count == 2
+        && expanded.Items.Any(x => x.FullPath == oldLog)
+        && expanded.Items.Any(x => x.FullPath == oldDump),
+        "Reviewed 30-day-old top-level log and dump files can appear on the selection list");
+    var reviewedLog = expanded.Items.Single(x => x.FullPath == oldLog);
+    var storedLog = cleaner.MoveToRecovery(reviewedLog);
+    Check(cleaner.ListRecovery().Single().Id == storedLog.Id,
+        "Only a selected, revalidated log file moves to Recovery");
+    cleaner.Restore(storedLog.Id);
+    Check(File.Exists(oldLog) && cleaner.ListRecovery().Count == 0,
+        "Reviewed log file restores without requiring irreversible deletion");
     Check(File.Exists(document) && File.Exists(newFile) && File.Exists(nestedFile),
         "Personal, recent and nested files remain intact");
 }
