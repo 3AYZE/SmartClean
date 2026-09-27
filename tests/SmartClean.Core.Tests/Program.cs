@@ -159,6 +159,8 @@ try
     try { cleaner.MoveToRecovery(candidate); Check(false, "Changed candidate blocked"); }
     catch (InvalidOperationException) { Check(true, "Changed candidate blocked"); }
 
+    // The modified file is now recent; make it old again for the recovery lifecycle fixture.
+    File.SetLastWriteTimeUtc(aged, oldDate);
     var current = cleaner.FindCandidates().Items.Single();
     var saved = cleaner.MoveToRecovery(current);
     Check(!File.Exists(aged) && cleaner.ListRecovery().Single().Id == saved.Id,
