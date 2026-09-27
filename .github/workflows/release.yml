@@ -1,5 +1,7 @@
 name: Build and release Windows EXE
 on:
+  push:
+    branches: [ main ]
   workflow_dispatch:
 permissions:
   contents: write
@@ -12,22 +14,6 @@ jobs:
     timeout-minutes: 45
     steps:
       - uses: actions/checkout@v4
-      # First repository upload contains base64-encoded bootstrap source chunks.
-      # Expand and commit ordinary, browsable source once. Later pushes build the real source directly.
-      - name: Expand first-source bootstrap
-        shell: pwsh
-        run: |
-          if (!(Test-Path 'src/SmartClean.WinUI/SmartClean.WinUI.csproj')) {
-            if (!(Test-Path 'SmartClean-bootstrap.zip')) { throw 'Initial source archive missing.' }
-            Expand-Archive -LiteralPath 'SmartClean-bootstrap.zip' -DestinationPath . -Force
-            Remove-Item -Force 'SmartClean-bootstrap.zip'
-            git config user.name 'github-actions[bot]'
-            git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-            git checkout -- .github/workflows/release.yml
-            git add -A
-            git commit -m 'Import full SmartClean source from initial upload'
-            git push origin HEAD:main
-          }
       - uses: actions/setup-dotnet@v4
         with:
           dotnet-version: 10.0.x
@@ -35,9 +21,14 @@ jobs:
         id: version
         shell: pwsh
         run: |
-          $version = "0.3.0.${{ github.run_number }}"
+          [xml]$project = Get-Content 'src/SmartClean.WinUI/SmartClean.WinUI.csproj'
+          $base = [version]$project.Project.PropertyGroup.Version
+          $revision = [int]'${{ github.run_number }}'
+          if ($revision -lt 1 -or $revision -gt 65000) { throw 'Run number exceeds supported assembly version range.' }
+          $version = "$($base.Major).$($base.Minor).$($base.Build).$revision"
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
+          Write-Host "Building SmartClean $version for commit $env:GITHUB_SHA"
       - name: Restore
         shell: pwsh
         run: >-
@@ -60,6 +51,13 @@ jobs:
           -p:PublishReadyToRun=false -p:PublishSingleFile=false
           -p:Version=${{ steps.version.outputs.version }}
           --output output/SmartClean-win-x64
+      - name: Verify compiled assembly version
+        shell: pwsh
+        run: |
+          $dll = (Resolve-Path 'output/SmartClean-win-x64/SmartClean.WinUI.dll').Path
+          $actual = [System.Reflection.AssemblyName]::GetAssemblyName($dll).Version.ToString()
+          $expected = '${{ steps.version.outputs.version }}'
+          if ($actual -ne $expected) { throw "Compiled version $actual does not match release version $expected." }
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y
@@ -72,9 +70,18 @@ jobs:
           & $iscc "/DAppVersion=${{ steps.version.outputs.version }}" "/DBuildOutput=$publish" "installer/SmartClean.iss"
           if ($LASTEXITCODE -ne 0) { exit $LASTEXITCODE }
           if (!(Test-Path "output/releases/SmartClean-Setup.exe")) { throw "Installer not created" }
-      - name: Publish ONE release asset
+      - name: Publish one verified EXE for newest main commit
         shell: pwsh
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
-          gh release create "${{ steps.version.outputs.tag }}" "output/releases/SmartClean-Setup.exe" --target (git rev-parse HEAD) --title "SmartClean ${{ steps.version.outputs.tag }}" --notes "SmartClean reviewed temporary-file recovery and Windows-managed application uninstall. One EXE installer; explicit user approval required for cleanup. Source pushes no longer create releases."
+          git fetch origin main --quiet
+          $head = (git rev-parse origin/main).Trim()
+          $built = (git rev-parse HEAD).Trim()
+          if ($head -ne $built) {
+            Write-Host "::notice::A newer source commit is available: $head. Skipping obsolete build $built."
+            exit 0
+          }
+          $tag = '${{ steps.version.outputs.tag }}'
+          gh release create "$tag" 'output/releases/SmartClean-Setup.exe' --target "$built" --title "SmartClean $tag" --notes "Automatically compiled from main ($built). Safety tests passed. One Windows installer asset; users approve each update." --latest
+          if ($LASTEXITCODE -ne 0) { throw 'GitHub release publishing failed.' }

@@ -1,6 +1,6 @@
 # SmartClean — Windows storage and dependency inspector
 
-**Current source: 0.3 (unreleased)**. C# / WinUI 3 / Windows 11-style Fluent interface.
+**Current source: 0.3; every successful main-branch push automatically publishes a new numbered Windows installer.** C# / WinUI 3 / Windows 11-style Fluent interface.
 
 SmartClean scans installed applications, explicit .NET runtime declarations, drive capacity, Downloads and the current user's temporary folder. It **does not infer that an unobserved dependency is absent**. Shared runtimes and drivers remain protected.
 
@@ -23,9 +23,9 @@ Run Test-Core-Windows.cmd to exercise runtime protection, bounded folder travers
 
 ## CI and release policy
 
-- The CI workflow (.github/workflows/ci.yml) tests and compiles Windows x64 on source pushes and pull requests. **It does not publish or update the installed application.**
-- The release workflow (.github/workflows/release.yml) runs **only when manually dispatched**. When manually started and successful, it produces a single installer asset: SmartClean-Setup.exe. Source commits do not create releases.
-- The installed app checks the latest **public stable GitHub release** for a newer compiled installer, verifies its SHA-256 digest and byte count, and requires approval before launching it. **A GitHub source commit cannot update an installed EXE.** This repository is private: token-free release checks require public release distribution. No GitHub credentials are embedded.
+- CI (.github/workflows/ci.yml) tests pull requests. The release workflow separately runs all safeguard tests and compiles every push to main.
+- The release workflow (.github/workflows/release.yml) automatically builds and publishes every current main-branch update after passing tests (and also supports manual runs). Each successful latest-source build gets an increasing four-part version and **one** stable release asset, SmartClean-Setup.exe. Failed or superseded builds do not publish.
+- The installed app checks the latest **public stable GitHub release** for a newer compiled installer, verifies its SHA-256 digest and byte count, and requires approval before launching it. GitHub Actions automatically builds source changes into a versioned installer; source alone cannot update an EXE. This repository is public, so no GitHub credentials are embedded.
 - Builds are currently unsigned; install only files obtained from the official repository and check Windows warnings.
 
 ## Security scope

@@ -28,7 +28,7 @@ public sealed class ReleaseClient : IDisposable
     {
         _ownsClient = http is null;
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(20) };
-        _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SmartClean", "0.2"));
+        _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SmartClean", "0.3"));
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
     }
 

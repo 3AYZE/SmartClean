@@ -355,7 +355,7 @@
                                 BorderThickness="1" CornerRadius="12" Padding="20">
                             <StackPanel Spacing="12">
                                 <TextBlock Text="Application updates" FontWeight="SemiBold" FontSize="17" />
-                                <TextBlock x:Name="CurrentVersionText" Text="Installed version: 0.2" />
+                                <TextBlock x:Name="CurrentVersionText" Text="Installed version: 0.3" />
                                 <TextBlock x:Name="UpdateStatusText" Text="Checking for public GitHub releases when SmartClean starts."
                                            Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
                                 <StackPanel Orientation="Horizontal" Spacing="10">
@@ -365,7 +365,7 @@
                                 </StackPanel>
                                 <ProgressBar x:Name="UpdateDownloadBar" IsIndeterminate="False" Minimum="0" Maximum="100"
                                              Value="0" Height="6" Visibility="Collapsed" />
-                                <TextBlock Text="Installs only approved, hash-verified releases. Source commits alone do not update this EXE; private releases need authentication, which this app does not store."
+                                <TextBlock Text="Every main-branch source update automatically produces a tested Windows installer release. SmartClean verifies its hash and requests approval before installing."
                                            FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
                             </StackPanel>
                         </Border>

@@ -1,7 +1,5 @@
 name: Verify SmartClean Windows build
 on:
-  push:
-    branches: [ main ]
   pull_request:
     branches: [ main ]
   workflow_dispatch:
@@ -40,4 +38,4 @@ jobs:
           -p:WindowsAppSDKSelfContained=true -p:PublishTrimmed=false -p:PublishAot=false
           -p:PublishReadyToRun=false -p:PublishSingleFile=false
           --output output/SmartClean-win-x64
-      # Intentionally no release, artifact, installer, or deployment here.
+      # Main pushes use release.yml (which runs these same safety tests before publishing).

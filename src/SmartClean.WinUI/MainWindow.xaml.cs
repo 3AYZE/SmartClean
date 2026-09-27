@@ -448,7 +448,7 @@ public sealed partial class MainWindow : Window
         if (_checkingUpdates || _installingUpdate || _updateCancellation.IsCancellationRequested) return;
         _checkingUpdates = true;
         CheckUpdatesButton.IsEnabled = false;
-        if (manual) UpdateStatusText.Text = "Checking GitHub for a stable release...";
+        if (manual) UpdateStatusText.Text = "Checking GitHub for the newest compiled Windows release...";
         try
         {
             var release = await _releases.GetLatestAsync(_updateCancellation.Token);
@@ -466,7 +466,7 @@ public sealed partial class MainWindow : Window
                 _availableUpdate = null;
                 UpdateInfo.IsOpen = false;
                 InstallUpdateButton.Visibility = Visibility.Collapsed;
-                UpdateStatusText.Text = "You're on the latest published version.";
+                UpdateStatusText.Text = $"This installation matches the latest published Windows build ({release.Version}). A newer GitHub source commit becomes installable after its build and tests finish.";
             }
         }
         catch (OperationCanceledException) when (_updateCancellation.IsCancellationRequested) { }
