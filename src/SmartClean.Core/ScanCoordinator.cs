@@ -36,10 +36,12 @@ public sealed class ScanCoordinator
             catch (Exception e) when (e is IOException or UnauthorizedAccessException)
             { warnings.Add("Drive capacity could not be read for one drive."); }
         }
-        if (dependencies.Count == 0)
-            warnings.Add("No explicit .NET runtimeconfig dependencies were observed. This does not mean applications have no dependencies.");
+        // Zero observed declarations is expected for many installations;
+        // it is a scope limitation, not a failed scan. Protection explains it.
         if (folders.Any(f => f.Truncated || f.SkippedEntries > 0))
-            warnings.Add("One or more folders could not be measured completely; some sizes are lower bounds.");
+             warnings.Add(string.Join("; ", folders.Where(f => f.Truncated || f.SkippedEntries > 0)
+                .Select(f => $"{f.Label}: {f.SkippedEntries:N0} skipped entries"
+                    + (f.Truncated ? " (scan entry limit reached)" : ""))));
         progress?.Report("Scan complete. No files or applications were modified.");
         return new ScanSnapshot(DateTimeOffset.Now, apps, dependencies, folders, disks, warnings);
     }
