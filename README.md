@@ -1,43 +1,35 @@
-# SmartClean 0.2 — Windows storage and dependency inspector
+# SmartClean — Windows storage and dependency inspector
 
-Local, read-only WinUI 3 Windows desktop app. **It cannot delete, uninstall, quarantine, or modify scanned files or applications.** Dependency detection is partial: missing .NET runtime declarations do not prove a component is unused.
+**Current source: 0.3 (unreleased)**. C# / WinUI 3 / Windows 11-style Fluent interface.
 
-## Distribution and updates
+SmartClean scans installed applications, explicit .NET runtime declarations, drive capacity, Downloads and the current user's temporary folder. It **does not infer that an unobserved dependency is absent**. Shared runtimes and drivers remain protected.
 
-- GitHub Actions builds the source on Windows on every push to `main`, runs the core safeguard tests, and if successful publishes **one** release asset: `SmartClean-Setup.exe`.
-- The release EXE is a **per-user installer**, bundling the entire unpackaged, self-contained WinUI publish output. Install to `%LOCALAPPDATA%\Programs\SmartClean` with Start-menu shortcut, no administrator access required.
-- SmartClean checks `3AYZE/SmartClean`'s latest **stable public** GitHub release when launched, and offers manual Check for updates in Settings. When a newer version is found, **Download and install** downloads the setup EXE, verifies GitHub's SHA-256 asset digest and exact file size, then opens the installer for your approval. It never silently runs an installer, does not hold a GitHub token, and does not modify user content.
-- **IMPORTANT:** This repository is currently private. GitHub's public releases API cannot provide updates from a private repository without credentials. To enable token-free updates for installed users, make the repository public in GitHub Settings; never embed a private access token in a distributed executable.
-- GitHub Actions must be enabled, and the workflow must have `contents:write` permission for `gh release create`. If the workflow or its tests fail, **no update is released**.
-- This is an unsigned installer until code signing is configured. Windows SmartScreen may warn about an unsigned/new application. Download only from this repository's Releases page.
-- App update checks operate only while SmartClean is open; the application adds no startup background service. No downloaded update is installed without user approval.
+## What works in current source
 
-## Build on Windows
+- **Overview:** app inventory, observed declarations, available space and a bounded folder scan. Folder errors identify affected folders.
+- **Applications:** search registered software, review known dependencies and open Windows Settings > Installed apps for a user-approved uninstall. SmartClean never executes uninstall strings from the registry.
+- **Cleanup:** only top-level .tmp and .temp files directly inside the current user's LOCAL temporary folder, last modified at least 30 days ago. Age does not prove that a file is unused: every move requires selection and confirmation.
+- **Recovery:** move each eligible, revalidated selected candidate into a dedicated per-user vault on the same volume, journaling the original path before the move. Restore without overwriting existing files. Permanently delete only a specifically selected stored payload after another confirmation.
+- **Protection:** mandatory safeguards for shared runtimes, personal folders, linked paths and unknown dependencies. Ordinary scans do not require elevation.
+- **Settings:** native light/dark theme, installed version and reviewed, hash-checked GitHub release updates.
 
-Prerequisites: Windows 10 19041+ or Windows 11; .NET 10 SDK is recommended (local build supports .NET 9 as a temporary fallback); internet for first NuGet restore. Run `Build-Windows.cmd`, which produces a **multi-file unpackaged publish folder** at `output\SmartClean-win-x64`. For an installable single EXE, install Inno Setup 6, then run:
+**Moving a file to Recovery does not free disk space** while it remains on the same volume. Potential storage is reclaimed only after a separate confirmed permanent deletion. Locked, changed or ineligible files are skipped. There is no recursive cleanup, registry modification, background application usage tracking, native DLL dependency graph or automatic application uninstall.
 
-```powershell
-& "${env:ProgramFiles(x86)}\Inno Setup 6\ISCC.exe" "installer\SmartClean.iss"
-```
+## Build locally without publishing a release
 
-The installer is created at `output\releases\SmartClean-Setup.exe`. GitHub Actions performs both operations automatically and assigns a distinct assembly/release version for every successful main-branch run.
+On Windows, install the .NET 10 SDK and run Build-Windows.cmd in the repository root. It produces the unpackaged multi-file application under output/SmartClean-win-x64. Start SmartClean.WinUI.exe **with its dependencies beside it**. If no window appears, run Run-SmartClean-Diagnostics.cmd.
 
-Run `Test-Core-Windows.cmd` for core policy tests. If no window appears after launch, run `Run-SmartClean-Diagnostics.cmd` and inspect the local logs. Never copy only `SmartClean.WinUI.exe` from the publish folder; its native runtime dependencies must remain alongside it. The **installer** is the only single file you need to download.
+Run Test-Core-Windows.cmd to exercise runtime protection, bounded folder traversal, update integrity and the actual temporary-file move / restore / purge lifecycle.
 
-## What is currently implemented
+## CI and release policy
 
-- Five-page native Windows 11 Fluent/Mica UI: Overview, Applications, Files & storage, Protection and Settings.
-- Cancelable on-demand scans of Windows uninstall records, bounded explicit `.runtimeconfig.json` dependency declarations, fixed-drive capacity, Downloads and temporary folders.
-- Conservative protection labels for known shared runtimes. Partial scans are disclosed; none of the UI's size and age evidence is approval to delete.
-- New GitHub release check, exact-origin installer URL allowlist, digest and size verification, visible user-approved update flow.
+- The CI workflow (.github/workflows/ci.yml) tests and compiles Windows x64 on source pushes and pull requests. **It does not publish or update the installed application.**
+- The release workflow (.github/workflows/release.yml) runs **only when manually dispatched**. When manually started and successful, it produces a single installer asset: SmartClean-Setup.exe. Source commits do not create releases.
+- The installed app checks the latest **public stable GitHub release** for a newer compiled installer, verifies its SHA-256 digest and byte count, and requires approval before launching it. **A GitHub source commit cannot update an installed EXE.** This repository is private: token-free release checks require public release distribution. No GitHub credentials are embedded.
+- Builds are currently unsigned; install only files obtained from the official repository and check Windows warnings.
 
-## Scope and limitations
+## Security scope
 
-- No cleanup/removal operations, background usage tracking, real deep dependency analysis, or elevation mode in this release. Protection rules cannot be disabled. The Protection page reports incomplete evidence rather than offering a misleading enable toggle.
-- GitHub Actions publishes only after a successful Windows build and core safeguards check. WinUI GUI launch verification on an interactive desktop should be performed before recommending a public release.
-- Code signing and rollback of previous installers are not yet implemented. Inno Setup creates the standard per-user uninstaller but application data stays in `%LOCALAPPDATA%\SmartClean`.
-- Update integrity uses the SHA-256 digest reported by GitHub; it does not substitute for publisher code signing.
+File cleanup is limited to the user's local temp root, without descending into subfolders or automatically deleting personal data. Metadata is rechecked before each move. Recovery is journaled and refuses overwrite. See docs/SECURITY.md for limitations and acceptance tests.
 
-## Layout
-
-`src/SmartClean.Core`: read-only scanning, dependency detection, update metadata verification and installer downloading. `src/SmartClean.WinUI`: Windows UI and update review. `installer/SmartClean.iss`: single-EXE per-user installer. `.github/workflows/release.yml`: CI test/build/release. `tests/SmartClean.Core.Tests`: safety and updater regression tests. `docs/`: diagnostic and security notes.
+The project is in development. Passing CI establishes core behavior and Windows compilation, not interactive GUI, accessibility or long-duration desktop reliability.
