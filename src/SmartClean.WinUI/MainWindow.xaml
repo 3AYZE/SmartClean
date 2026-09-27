@@ -60,7 +60,7 @@
                 </InfoBar>
                 <InfoBar x:Name="StatusInfo" Grid.Row="0" Title="Ready to scan"
                          Message="Scanning does not change files. Optional cleanup moves only selected eligible temporary files to Recovery."
-                         Severity="Informational" IsOpen="True" IsClosable="False" Margin="18,8,22,4" />
+                         Severity="Informational" IsOpen="False" IsClosable="True" Margin="18,8,22,4" />
                 </StackPanel>
 
                 <!-- OVERVIEW -->
@@ -191,6 +191,8 @@
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="Install location" FontWeight="SemiBold" Margin="0,6,0,0" />
                                 <TextBlock x:Name="DetailLocation" Text="—" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
+                                <Button x:Name="OpenWindowsUninstallButton" Content="Review in Windows Settings"
+                                        Click="OpenWindowsUninstall_Click" IsEnabled="False" HorizontalAlignment="Left" />
                                 <TextBlock Text="Important: absence of observed declarations does not prove that an app has no dependencies."
                                            Foreground="{ThemeResource SmartSubtleText}" FontSize="12" TextWrapping="Wrap" />
                             </StackPanel>
