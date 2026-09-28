@@ -250,6 +250,18 @@ public sealed partial class MainWindow : Window
             ? "Try a scan with installed .NET applications, but lack of evidence never justifies removal."
             : "Select a runtime to see the app declarations and evidence paths. Unknown or unobserved use remains protected.";
 
+        var otherComponents = SharedComponentAnalyzer.Build(
+            result.Applications, result.OtherComponentScan.Evidence)
+            .Select(item => new SharedComponentRow(item)).ToArray();
+        OtherComponentList.ItemsSource = otherComponents;
+        OtherComponentSummary.Text = otherComponents.Length == 0
+            ? "No registered or observed components matched the current supported families. This does not prove your apps have no shared dependencies."
+            : otherComponents.Length.ToString("N0") + " installed or observed component entries · "
+              + result.OtherComponentScan.BinariesRead.ToString("N0") + " native binaries inspected · "
+              + result.OtherComponentScan.UnreadableFiles.ToString("N0") + " unreadable files · "
+              + result.OtherComponentScan.UninspectedApps.ToString("N0") + " registered apps without accessible install evidence.";
+        OtherComponentDetails.Text = "Select a component to see observed imports and package references. Matching an import to an installed runtime family does not prove which redistributable supplied it.";
+
         var issueLines = result.Folders.SelectMany(folder =>
             folder.Issues.Select(issue =>
                 (issue.IsExpected ? "Expected exclusion" : "Partial scan")
@@ -261,6 +273,14 @@ public sealed partial class MainWindow : Window
             : ["No paths were skipped. Undeclared or dynamically loaded dependencies can still exist."];
         AppListSubtitle.Text = $"{result.Applications.Count:N0} registered entries · "
                              + "Registry size estimates may be missing or inaccurate.";
+    }
+
+    private void OtherComponentList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (OtherComponentDetails is null) return;
+        OtherComponentDetails.Text = OtherComponentList.SelectedItem is SharedComponentRow row
+            ? row.Details
+            : "Select a component. Missing observed references never prove a component is unused.";
     }
 
     private void RuntimeList_SelectionChanged(object sender, SelectionChangedEventArgs e)
@@ -301,10 +321,15 @@ public sealed partial class MainWindow : Window
         DetailProtection.Text = (app.IsProtected ? "PROTECTED — " : "MANUAL REVIEW ONLY — ")
                                + app.ProtectionReason;
         var deps = _snapshot.Dependencies.Where(d => d.AppId == app.Id).ToArray();
-        DetailDependencies.Text = deps.Length == 0
-            ? "No explicit .NET runtime declarations found in the bounded scan. Other dependencies may exist."
-            : string.Join("\n", deps.Select(d =>
-                $"• {d.FrameworkName} (requested {d.RequestedVersion})\n   Evidence: {d.EvidencePath}"));
+        var native = _snapshot.OtherComponentScan.Evidence.Where(e => e.AppId == app.Id)
+            .Take(16).ToArray();
+        var detailLines = deps.Select(d => "• .NET " + d.FrameworkName
+                + " (requested " + d.RequestedVersion + ")\n  Evidence: " + d.EvidencePath)
+            .Concat(native.Select(e => "• " + e.Category + " — " + e.EvidenceType
+                + "\n  " + e.Detail + "\n  Evidence: " + e.EvidencePath)).ToArray();
+        DetailDependencies.Text = detailLines.Length == 0
+            ? "No declarations or matching imports found in the bounded scan. Unknown or dynamically loaded dependencies may still exist."
+            : string.Join("\n\n", detailLines);
         DetailLocation.Text = app.InstallLocation ?? "Not reported in uninstall registry.";
         OpenWindowsUninstallButton.IsEnabled = !app.IsProtected;
     }

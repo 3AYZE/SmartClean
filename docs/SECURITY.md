@@ -14,6 +14,8 @@
 
 - Only selected ready fixed local drive roots are accepted; selection is validated again before scanning. Every drive-wide scan is bounded to 45,000 entries, cancelable, read-only and never expands file deletion beyond the approved temp-folder allowlist. Network/removable drives and arbitrary path inputs are excluded.
 - A .NET runtime usage relationship means an inspected registered application explicitly requests the matching framework major/minor via its runtimeconfig file. Do not describe the relationship as proof a specific installed patch was loaded, and never remove an unobserved runtime automatically.
+- Native-component inspection reads bounded PE import descriptors and selected dependency manifests under registered install locations. It never executes binaries, follows linked roots, elevates privileges, or claims that a particular installed package supplied an imported DLL.
+- Visual C++ architectures match only compatible x86/x64 import evidence. Java, Python, WebView2, Windows App SDK and graphics components may be bundled or dynamically loaded; unmatched or unknown components remain protected.
 - Capture a bounded list of excluded filesystem paths and reasons. Linked paths are intentionally skipped without an alarming warning; unreadable paths and truncated totals indicate partial coverage and must be labeled accordingly.
 
 ## Automated core checks

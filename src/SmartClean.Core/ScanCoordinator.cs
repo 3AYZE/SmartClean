@@ -23,6 +23,9 @@ public sealed class ScanCoordinator
         progress?.Report("Inspecting explicit .NET dependency declarations...");
         var dependencies = new DependencyInspector().Inspect(apps, ct);
         ct.ThrowIfCancellationRequested();
+        progress?.Report("Inspecting native DLL imports and package references...");
+        var componentScan = new ComponentInspector().Inspect(apps, ct);
+        ct.ThrowIfCancellationRequested();
         progress?.Report("Measuring Downloads and temporary folders...");
         var scanner = new FolderScanner();
         var folders = scanner.Scan(FolderScanner.DefaultTargets(), ct).ToList();
@@ -65,6 +68,9 @@ public sealed class ScanCoordinator
                     + (folder.Truncated ? "; entry limit reached; measured bytes are a lower bound" : ""));
         }
         progress?.Report("Scan complete. No files or applications were modified.");
-        return new ScanSnapshot(DateTimeOffset.Now, apps, dependencies, folders, disks, warnings);
+        return new ScanSnapshot(DateTimeOffset.Now, apps, dependencies, folders, disks, warnings)
+        {
+            OtherComponentScan = componentScan
+        };
     }
 }

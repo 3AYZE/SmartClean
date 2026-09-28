@@ -73,3 +73,23 @@ public sealed class RuntimeUsageRow
             "• " + d.AppName + " (requests " + d.RequestedVersion + ")\n  Evidence: " + d.EvidencePath));
     public RuntimeUsageRow(RuntimeUsage usage) => Usage = usage;
 }
+
+public sealed class SharedComponentRow
+{
+    public SharedComponentUsage Usage { get; }
+    public string Name => Usage.Name;
+    public string Family => Usage.Category + " · " + Usage.Architecture
+        + (Usage.Registered ? " · installed " + Usage.InstalledVersion : " · installation unverified");
+    public string Summary => Usage.Evidence.Count == 0
+        ? "No observed references — keep protected"
+        : Usage.Evidence.Select(x => x.AppId).Distinct().Count()
+            + " app(s) with evidence — review details";
+    public string Details => Usage.Evidence.Count == 0
+        ? "No matching imports or package declarations were observed in this bounded scan. "
+          + "This does not mean the component is unused or safe to uninstall."
+        : string.Join("\n\n", Usage.Evidence.Take(35).Select(e =>
+            "• " + e.AppName + " — " + e.EvidenceType + " (" + e.Architecture + ")\n  "
+            + e.Detail + "\n  Evidence: " + e.EvidencePath))
+          + (Usage.Evidence.Count > 35 ? "\nAdditional evidence omitted from the preview." : "");
+    public SharedComponentRow(SharedComponentUsage usage) => Usage = usage;
+}

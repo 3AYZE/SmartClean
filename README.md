@@ -2,7 +2,7 @@
 
 **Current source: 0.3; every successful main-branch push automatically publishes a new numbered Windows installer.** C# / WinUI 3 / Windows 11-style Fluent interface.
 
-SmartClean scans installed applications, explicit .NET runtime declarations, drive capacity, Downloads and the current user's temporary folder. It **does not infer that an unobserved dependency is absent**. Shared runtimes and drivers remain protected.
+SmartClean scans installed applications, explicit .NET runtime declarations, bounded native PE imports and managed package declarations, drive capacity, Downloads and the current user's temporary folder. It **does not infer that an unobserved dependency is absent**. Shared runtimes and drivers remain protected.
 
 ## What works in current source
 
@@ -10,10 +10,10 @@ SmartClean scans installed applications, explicit .NET runtime declarations, dri
 - **Applications:** search registered software, review known dependencies and open Windows Settings > Installed apps for a user-approved uninstall. SmartClean never executes uninstall strings from the registry.
 - **Cleanup:** inspect regular top-level .tmp, .temp, .log and .dmp files in your own LOCAL temporary folder. Eligible files must be at least 30 days old. The page shows eligible file names, locations, dates and sizes, plus read-only examples and counts for excluded files with specific reasons. Users select items, see the full review list, can uncheck individual entries and confirm before any move. No automatic removal.
 - **Recovery:** move only reviewed and revalidated candidates into a per-user vault on the same volume, journaling the original path. Select which Recovery files to restore or delete. The final deletion dialog lists every chosen file, original path and size, permits individual deselection, and requires explicit confirmation. Existing files are never overwritten on restore.
-- **Protection:** mandatory safeguards for shared runtimes, personal folders, linked paths and unknown dependencies. Ordinary scans do not require elevation.
+- **Protection:** mandatory safeguards for shared runtimes, personal folders, linked paths and unknown dependencies. A second component inspector covers recognized registered Visual C++ (2013 and 2015–2022), WebView2, Windows App SDK, Java, Python, Vulkan and legacy DirectX components. It examines bounded, read-only native PE imports and managed dependency manifests for registered applications. Each relationship shows its supporting file and detection method. It cannot prove the exact installed redistributable was used, or that a runtime without evidence is unused.
 - **Settings:** native light/dark theme, installed version and reviewed, hash-checked GitHub release updates.
 
-**Moving a file to Recovery does not free disk space** while it remains on the same volume. Potential storage is reclaimed only after a separate confirmed permanent deletion. Locked, changed or ineligible files are skipped. There is no recursive cleanup, registry modification, background application usage tracking, native DLL dependency graph or automatic application uninstall.
+**Moving a file to Recovery does not free disk space** while it remains on the same volume. Potential storage is reclaimed only after a separate confirmed permanent deletion. Locked, changed or ineligible files are skipped. There is no recursive cleanup, registry modification, background application usage tracking, full native DLL/dependency graph or automatic application uninstall.
 
 ## Build locally without publishing a release
 
@@ -26,6 +26,15 @@ Run Test-Core-Windows.cmd to exercise runtime protection, bounded folder travers
 - In **Files & storage**, select C:, D:, other ready local fixed drives, or **All fixed drives**. This is an on-demand, bounded, read-only scan (45,000 entries per drive). Linked paths are not traversed. Incomplete drive totals are lower bounds, not estimates of reclaimable storage. Drive-wide scans never add files to the temporary-file deletion list.
 - In **Protection**, each recognized installed modern .NET runtime shows registered applications whose runtimeconfig files explicitly declare a compatible major/minor framework family (for example Microsoft.NETCore.App 9.0.0 for an installed .NET 9.0.x runtime). Select a runtime to see app names, requested versions and evidence paths. This does not prove the exact installed patch was loaded, and zero observed declarations does not mean the runtime is unused or removable.
 - Scan limitations list specific excluded paths and reasons where available. Linked paths are expected exclusions, whereas unreadable directories and entry limits produce partial-scan notices.
+
+## What component evidence means
+
+- **Declared .NET family:** application configuration requests a framework major/minor. This does not prove which installed patch was loaded.
+- **Native PE import:** an app binary refers to a library such as vcruntime140.dll, WebView2Loader.dll, vulkan-1.dll, jvm.dll or python312.dll. The library could be bundled locally, or loaded only under certain conditions. Matching an import to a registered redistributable indicates possible usage of the component family, NOT proof that the separately installed package supplied it.
+- **Managed package declaration:** an inspected dependency manifest lists WebView2 or Windows App SDK. An app may still bundle those dependencies.
+- **Unverified:** an app's install path is missing/inaccessible, a binary loads DLLs dynamically, or only optional features need the runtime. Missing observed relationships never authorize a component uninstall.
+
+Inspection is bounded to 12 binaries, 8 dependency manifests and 4 shallow directories per registered app, subject to file-size and app limits. Executables are never started and privileges are not elevated. Results are informational; dependency-based automatic uninstalls remain disabled.
 
 ## CI and release policy
 

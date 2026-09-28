@@ -11,7 +11,9 @@ public static class ProtectionRules
         (NewPattern(@"(?:microsoft\s+)?windows\s+app\s+(?:sdk\s+)?runtime"), "Windows App SDK shared runtime."),
         (NewPattern(@"(?:microsoft\s+)?edge\s+webview2\s+runtime"), "Shared WebView2 runtime used by desktop applications."),
         (NewPattern(@"(?:directx\s+(?:runtime|end.user)|vulkan\s+runtime)"), "Shared graphics runtime."),
-        (NewPattern(@"(?:graphics|display|audio|chipset|bluetooth|wi.fi|wireless)\s+driver"), "Hardware driver or companion component. Manual OS/vendor tools only.")
+        (NewPattern(@"(?:graphics|display|audio|chipset|bluetooth|wi.fi|wireless)\s+driver"), "Hardware driver or companion component. Manual OS/vendor tools only."),
+        (NewPattern(@"\b(?:java(?:\(tm\))?(?:\s+\d+(?:\s+update\s+\d+)?|\s+se\s+runtime)|openjdk\s+(?:runtime|jre)|temurin.*jre)\b"), "Shared Java runtime. Not eligible for automatic removal."),
+        (NewPattern(@"^python\s+3\.\d+(?:\.\d+)?\b"), "Python interpreter or development runtime. Other applications and projects may depend on it.")
     ];
 
     private static Regex NewPattern(string pattern) =>

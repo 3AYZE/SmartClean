@@ -109,6 +109,107 @@ using (var json = JsonDocument.Parse("""
     Check(DependencyInspector.ParseRuntimeConfig("app-1", "Example", "test", json.RootElement).Count == 0,
         "Self-contained runtimes not counted as external dependencies");
 
+// Other shared components must never be treated as removable on a missing match.
+// Verify native import classification and a real on-disk, non-executed PE fixture.
+Check(ComponentInspector.ClassifyImport("vcruntime140.dll")?.Family == "vc14"
+      && ComponentInspector.ClassifyImport("msvcp120.dll")?.Family == "vc12",
+    "Visual C++ native DLLs map to separate redistributable families");
+Check(ComponentInspector.ClassifyImport("WebView2Loader.dll")?.Family == "webview2"
+      && ComponentInspector.ClassifyImport("vulkan-1.dll")?.Family == "vulkan"
+      && ComponentInspector.ClassifyImport("d3dx9_43.dll")?.Family == "directx-legacy",
+    "WebView2, Vulkan and legacy DirectX imports are recognized");
+Check(ComponentInspector.ClassifyImport("jvm.dll")?.Family == "java"
+      && ComponentInspector.ClassifyImport("python312.dll")?.Family == "python3.12"
+      && ComponentInspector.ClassifyImport("kernel32.dll") is null,
+    "Java and Python imports are categorized without classifying ordinary Windows DLLs");
+Check(SharedComponentAnalyzer.RecognizeInstalled(
+        "Microsoft Visual C++ 2015-2022 Redistributable (x64) - 14.40.0")?.Architecture == "x64"
+      && SharedComponentAnalyzer.RecognizeInstalled(
+        "Microsoft Edge WebView2 Runtime")?.Family == "webview2"
+      && SharedComponentAnalyzer.RecognizeInstalled(
+        "Python 3.12.5 (64-bit)")?.Family == "python3.12",
+    "Recognized installed component families include architecture and interpreter versions");
+
+var componentFixture = Path.Combine(Path.GetTempPath(),
+    "smartclean-component-test-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(componentFixture);
+try
+{
+    var exe = Path.Combine(componentFixture, "demo.exe");
+    var bytes = new byte[1024];
+    // Minimal valid PE32 header with one .text section and an import descriptor
+    // referencing vcruntime140.dll. This fixture is NEVER executed.
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
+        bytes.AsSpan(0, 2), 0x5A4D);
+    System.Buffers.Binary.BinaryPrimitives.WriteInt32LittleEndian(
+        bytes.AsSpan(0x3c, 4), 0x80);
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(
+        bytes.AsSpan(0x80, 4), 0x00004550);
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
+        bytes.AsSpan(0x84, 2), 0x14c); // x86
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
+        bytes.AsSpan(0x86, 2), 1); // one section
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
+        bytes.AsSpan(0x94, 2), 0xE0); // PE32 optional header size
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt16LittleEndian(
+        bytes.AsSpan(0x98, 2), 0x10b); // PE32
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(
+        bytes.AsSpan(0x98 + 104, 4), 0x1000); // import directory RVA
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(
+        bytes.AsSpan(0x178 + 12, 4), 0x1000); // section RVA
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(
+        bytes.AsSpan(0x178 + 16, 4), 0x200); // raw size
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(
+        bytes.AsSpan(0x178 + 20, 4), 0x200); // raw offset
+    System.Buffers.Binary.BinaryPrimitives.WriteUInt32LittleEndian(
+        bytes.AsSpan(0x200 + 12, 4), 0x1040); // descriptor name RVA
+    System.Text.Encoding.ASCII.GetBytes("vcruntime140.dll\0").CopyTo(bytes, 0x240);
+    File.WriteAllBytes(exe, bytes);
+
+    var depsFile = Path.Combine(componentFixture, "demo.deps.json");
+    File.WriteAllText(depsFile, """
+        {"libraries":{
+          "Microsoft.Web.WebView2/1.0.3100":{"type":"package"},
+          "Microsoft.WindowsAppSDK/1.7.0":{"type":"package"}
+        }}
+        """);
+    var demo = new InstalledApp("demo", "Demo App", "Example",
+        "1", componentFixture, 1024, null, "fixture-registry", false,
+        "Manual review", null);
+    var result = new ComponentInspector().Inspect([demo]);
+    Check(result.BinariesRead == 1 && result.Evidence.Any(e =>
+        e.Family == "vc14" && e.Architecture == "x86"
+        && e.EvidencePath.EndsWith("demo.exe", StringComparison.OrdinalIgnoreCase)),
+        "Bounded PE import parser detects x86 Visual C++ DLL with source file");
+    Check(result.Evidence.Any(e => e.Family == "webview2"
+        && e.EvidenceType == "Managed package declaration")
+        && result.Evidence.Any(e => e.Family == "windows-app-sdk"),
+        "Managed package declarations surface WebView2 and Windows App SDK usage");
+
+    InstalledApp Runtime(string id, string name, string version) =>
+        new(id, name, "Microsoft", version, null, null, null,
+            "fixture-registry", true, "Shared runtime", null);
+    var components = SharedComponentAnalyzer.Build(
+        [
+            Runtime("vc-x86", "Microsoft Visual C++ 2015-2022 Redistributable (x86)", "14.3"),
+            Runtime("vc-x64", "Microsoft Visual C++ 2015-2022 Redistributable (x64)", "14.3"),
+            Runtime("web", "Microsoft Edge WebView2 Runtime", "1.0"),
+            Runtime("java", "Java 8 Update 421", "8.0")
+        ], result.Evidence);
+    Check(components.Single(c => c.Id == "vc-x86").Evidence.Any(e => e.AppName == "Demo App")
+        && components.Single(c => c.Id == "vc-x64").Evidence.Count == 0,
+        "Native x86 imports do not incorrectly implicate the x64 redistributable");
+    Check(components.Single(c => c.Id == "web").Evidence.Any(e => e.AppId == "demo"),
+        "Declared WebView2 package appears under recognized installed runtime");
+    Check(components.Single(c => c.Id == "java").Evidence.Count == 0,
+        "No evidence for a registered Java runtime does not infer uninstall safety");
+}
+finally
+{
+    if (Directory.Exists(componentFixture))
+        Directory.Delete(componentFixture, recursive: true);
+}
+
 var scratch = Path.Combine(Path.GetTempPath(), "smartclean-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(scratch);
 try

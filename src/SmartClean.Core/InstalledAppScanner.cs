@@ -30,9 +30,13 @@ public sealed class InstalledAppScanner
                     try
                     {
                         using var entry = uninstall.OpenSubKey(subname);
-                        if (entry is null || IsTrue(entry.GetValue("SystemComponent"))) continue;
+                        if (entry is null) continue;
                         var name = Read(entry, "DisplayName");
                         if (string.IsNullOrWhiteSpace(name)) continue;
+                        // Hidden shared runtimes such as WebView2 are inventory only.
+                        // Keep other hidden system components out of the app list.
+                        if (IsTrue(entry.GetValue("SystemComponent"))
+                            && SharedComponentAnalyzer.RecognizeInstalled(name) is null) continue;
                         // Update/patch records are not standalone apps and often exaggerate storage.
                         if (Read(entry, "ReleaseType") is not null || Read(entry, "ParentKeyName") is not null) continue;
                         var publisher = Read(entry, "Publisher") ?? "Unknown publisher";

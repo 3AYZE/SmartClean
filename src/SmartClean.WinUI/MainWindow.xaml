@@ -70,7 +70,7 @@
                             <Grid.ColumnDefinitions><ColumnDefinition Width="*"/><ColumnDefinition Width="Auto"/></Grid.ColumnDefinitions>
                             <StackPanel Spacing="5">
                                 <TextBlock Text="Overview" Style="{StaticResource TitleTextBlockStyle}" />
-                                <TextBlock Text="A clear picture of your apps, storage and known dependencies."
+                                <TextBlock Text="Registered apps, storage and evidence-backed software relationships."
                                            Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
                             </StackPanel>
                             <StackPanel Grid.Column="1" Orientation="Horizontal" Spacing="8" VerticalAlignment="Center">
@@ -121,9 +121,9 @@
                             <Border Grid.Column="2" Background="{ThemeResource SmartCardBackground}"
                                     BorderBrush="{ThemeResource SmartCardStroke}" BorderThickness="1" CornerRadius="12" Padding="20">
                                 <StackPanel Spacing="8">
-                                    <TextBlock Text="Declared dependencies" Foreground="{ThemeResource SmartSubtleText}" />
+                                    <TextBlock Text="Observed dependency references" Foreground="{ThemeResource SmartSubtleText}" />
                                     <TextBlock x:Name="DependencyCount" Text="—" FontSize="30" FontWeight="SemiBold" />
-                                    <TextBlock Text="Observed .NET runtime declarations only" FontSize="12"
+                                    <TextBlock Text="Bounded .NET configs, native imports and package references" FontSize="12"
                                                TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
                                 </StackPanel>
                             </Border>
@@ -186,14 +186,14 @@
                                 <Rectangle Height="1" Fill="{ThemeResource SmartCardStroke}" Margin="0,4" />
                                 <TextBlock Text="Protection status" FontWeight="SemiBold" />
                                 <TextBlock x:Name="DetailProtection" Text="No item selected." TextWrapping="Wrap" />
-                                <TextBlock Text="Declared runtime dependencies" FontWeight="SemiBold" Margin="0,6,0,0" />
+                                <TextBlock Text="Observed dependency evidence" FontWeight="SemiBold" Margin="0,6,0,0" />
                                 <TextBlock x:Name="DetailDependencies" Text="Select an item to inspect its evidence."
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="Install location" FontWeight="SemiBold" Margin="0,6,0,0" />
                                 <TextBlock x:Name="DetailLocation" Text="—" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
                                 <Button x:Name="OpenWindowsUninstallButton" Content="Review in Windows Settings"
                                         Click="OpenWindowsUninstall_Click" IsEnabled="False" HorizontalAlignment="Left" />
-                                <TextBlock Text="Important: absence of observed declarations does not prove that an app has no dependencies."
+                                <TextBlock Text="Important: a native import or package reference may be bundled. Missing evidence does not prove that an app has no dependencies."
                                            Foreground="{ThemeResource SmartSubtleText}" FontSize="12" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
@@ -373,11 +373,40 @@
                                 BorderThickness="1" CornerRadius="12" Padding="20">
                             <StackPanel Spacing="12">
                                 <TextBlock Text="Protected by design" FontSize="17" FontWeight="SemiBold" />
-                                <TextBlock Text="• Known shared runtimes (.NET, VC++, WebView2, graphics components)" TextWrapping="Wrap" />
+                                <TextBlock Text="• Shared runtimes (.NET, Visual C++, WebView2, Java, Python, graphics, Windows App SDK) stay protected" TextWrapping="Wrap" />
                                 <TextBlock Text="• Unknown or unverified dependencies: never assumed safe" TextWrapping="Wrap" />
                                 <TextBlock Text="• Personal projects, Downloads and game saves: no automatic deletion" TextWrapping="Wrap" />
                                 <TextBlock Text="• Directory junctions and symbolic links: not followed by the folder scan" TextWrapping="Wrap" />
                                 <TextBlock Text="• App removal: Windows Settings handles uninstallation; registry commands are never executed" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Other shared components and applications" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock Text="Visual C++, WebView2, Windows App SDK, Java, Python, Vulkan and legacy DirectX. Select a component to see app names and native-import or package evidence."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <TextBlock x:Name="OtherComponentSummary" Text="Run a scan to inventory recognized components and read bounded application imports."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <ListView x:Name="OtherComponentList" SelectionMode="Single" MaxHeight="340"
+                                          SelectionChanged="OtherComponentList_SelectionChanged">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:SharedComponentRow">
+                                            <StackPanel Spacing="3" Padding="3,5">
+                                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                <TextBlock Text="{x:Bind Family}" FontSize="12"
+                                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                                <TextBlock Text="{x:Bind Summary}" FontSize="12"
+                                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                                <TextBlock Text="Observed application references" FontWeight="SemiBold" />
+                                <TextBlock x:Name="OtherComponentDetails" Text="Select a component to inspect matching applications and the exact files supporting each relationship."
+                                           IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+                                <TextBlock Text="Native imports and managed package references indicate possible use, not proof that a separately installed redistributable supplied the library. An empty result never authorizes removal."
+                                           FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
                         <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
@@ -410,7 +439,7 @@
                             </StackPanel>
                         </Border>
                         <TextBlock Text="Scan limitations" FontSize="17" FontWeight="SemiBold" Margin="0,6,0,0" />
-                        <TextBlock Text="The dependency inspector reads bounded runtimeconfig files within registered install folders. Native DLL loading, optional features, unregistered portable apps and most non-.NET relationships are not verified. The exact scan exclusions are listed below."
+                        <TextBlock Text="Dependency scanning reads bounded .NET runtime declarations, selected native PE imports and managed package references within registered installation folders. Dynamic loading, bundled DLLs, optional features and portable applications may remain unobserved. File-system exclusions are listed below."
                                    TextWrapping="Wrap" />
                         <ListView x:Name="WarningsList" SelectionMode="None" IsItemClickEnabled="False" />
                     </StackPanel>
