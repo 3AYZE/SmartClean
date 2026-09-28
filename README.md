@@ -21,6 +21,12 @@ On Windows, install the .NET 10 SDK and run Build-Windows.cmd in the repository 
 
 Run Test-Core-Windows.cmd to exercise runtime protection, bounded folder traversal, update integrity and the actual temporary-file move / restore / purge lifecycle.
 
+## Drive scans and .NET runtime relationships
+
+- In **Files & storage**, select C:, D:, other ready local fixed drives, or **All fixed drives**. This is an on-demand, bounded, read-only scan (45,000 entries per drive). Linked paths are not traversed. Incomplete drive totals are lower bounds, not estimates of reclaimable storage. Drive-wide scans never add files to the temporary-file deletion list.
+- In **Protection**, each recognized installed modern .NET runtime shows registered applications whose runtimeconfig files explicitly declare a compatible major/minor framework family (for example Microsoft.NETCore.App 9.0.0 for an installed .NET 9.0.x runtime). Select a runtime to see app names, requested versions and evidence paths. This does not prove the exact installed patch was loaded, and zero observed declarations does not mean the runtime is unused or removable.
+- Scan limitations list specific excluded paths and reasons where available. Linked paths are expected exclusions, whereas unreadable directories and entry limits produce partial-scan notices.
+
 ## CI and release policy
 
 - CI (.github/workflows/ci.yml) tests pull requests. The release workflow separately runs all safeguard tests and compiles every push to main.

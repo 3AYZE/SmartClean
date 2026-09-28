@@ -22,6 +22,67 @@ var runtimeNames = new[]
 foreach (var name in runtimeNames)
     Check(ProtectionRules.Classify(name, "Microsoft Corporation").IsProtected,
         $"Shared runtime protected: {name}");
+// Inverse dependency relationships: a .NET 9 installed runtime family can
+// report which REGISTERED apps declare that major/minor family. This is NOT
+// evidence of exact patch loading or proof that unobserved runtimes are unused.
+var fakeRuntimes = new[]
+{
+    new InstalledApp("runtime9", "Microsoft .NET Runtime - 9.0.12 (x64)",
+        "Microsoft Corporation", "9.0.12", null, null, null, "test-registry", true,
+        "Shared runtime", null),
+    new InstalledApp("desktop9", "Microsoft Windows Desktop Runtime - 9.0.12 (x64)",
+        "Microsoft Corporation", "9.0.12", null, null, null, "test-registry", true,
+        "Shared runtime", null),
+    new InstalledApp("runtime8", "Microsoft .NET Runtime - 8.0.14 (x64)",
+        "Microsoft Corporation", "8.0.14", null, null, null, "test-registry", true,
+        "Shared runtime", null),
+    new InstalledApp("ordinary", "Video Editor", "Demo Inc", "1.0",
+        @"D:\\VideoEditor", null, null, "test-registry", false, "Manual review", null)
+};
+var declarations = new[]
+{
+    new DependencyEvidence("ordinary", "Video Editor", "Microsoft.NETCore.App",
+        "9.0.0", @"D:\\VideoEditor\\VideoEditor.runtimeconfig.json"),
+    new DependencyEvidence("ordinary", "Video Editor", "Microsoft.WindowsDesktop.App",
+        "9.0.0", @"D:\\VideoEditor\\VideoEditor.runtimeconfig.json")
+};
+var linkedRuntimes = RuntimeUsageAnalyzer.Build(fakeRuntimes, declarations);
+Check(linkedRuntimes.Count == 3, "Only recognized installed runtime families are mapped");
+Check(linkedRuntimes.Single(r => r.RuntimeAppId == "runtime9")
+    .DeclaredDependents.Single().AppName == "Video Editor"
+    && linkedRuntimes.Single(r => r.RuntimeAppId == "runtime9")
+        .DeclaredDependents.Single().RequestedVersion == "9.0.0",
+    ".NET 9 correctly shows an app declaring the 9.0 runtime family");
+Check(linkedRuntimes.Single(r => r.RuntimeAppId == "desktop9")
+    .DeclaredDependents.Single().AppName == "Video Editor",
+    ".NET 9 desktop dependencies use the correct separate framework family");
+Check(linkedRuntimes.Single(r => r.RuntimeAppId == "runtime8")
+    .DeclaredDependents.Count == 0
+    && fakeRuntimes.Single(r => r.Id == "runtime8").IsProtected,
+    "No detected declaration never unprotects another installed runtime");
+Check(RuntimeUsageAnalyzer.FrameworkFromInstalledName(
+    "Microsoft .NET Framework 4.8") is null,
+    "Legacy .NET Framework is never confused with the modern .NET 9 runtime");
+
+var selectedTargets = DriveScanCatalog.SelectFixedRoots(
+    [@"C:\\", @"D:\\"], [@"D:\\", @"C:\\", @"D:\\"]);
+Check(selectedTargets.Count == 2
+    && selectedTargets[0].Path == Path.GetPathRoot(Path.GetFullPath(@"D:\\"))
+    && selectedTargets.All(t => t.IsPersonalData),
+    "C and D or All fixed drives are deduplicated and always read-only inventory");
+try
+{
+    DriveScanCatalog.SelectFixedRoots([@"C:\\", @"D:\\"], [@"E:\\"]);
+    Check(false, "Unapproved drive root rejected");
+}
+catch (ArgumentException) { Check(true, "Unapproved drive root rejected"); }
+try
+{
+    DriveScanCatalog.SelectFixedRoots([@"C:\\", @"D:\\"], [@"C:\\Windows"]);
+    Check(false, "Folder path cannot masquerade as an allowed drive root");
+}
+catch (ArgumentException) { Check(true, "Folder path cannot masquerade as an allowed drive root"); }
+
 Check(!ProtectionRules.Classify("Old Video Editor", "Example Inc").IsProtected,
     "Ordinary app not falsely labeled a known runtime");
 Check(ProtectionRules.Classify(null, null).IsProtected,
@@ -88,6 +149,9 @@ try
             var linkedResult = scanner.Scan([root])[0];
             Check(linkedResult.Bytes == 10 && linkedResult.SkippedEntries >= 1,
                 "Directory symlink is skipped; outside bytes not counted");
+            Check(linkedResult.Issues.Any(i => i.IsExpected
+                && i.Path.EndsWith("linked", StringComparison.OrdinalIgnoreCase)),
+                "Expected linked-path exclusions carry the actual path and do not imply scan failure");
         }
         catch (Exception e) when (e is UnauthorizedAccessException or IOException or PlatformNotSupportedException)
         {

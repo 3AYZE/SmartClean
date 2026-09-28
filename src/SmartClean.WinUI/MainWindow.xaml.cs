@@ -16,6 +16,7 @@ public sealed partial class MainWindow : Window
     private CancellationTokenSource? _scanCancellation;
     private ScanSnapshot? _snapshot;
     private AppRow[] _allApps = [];
+    private readonly List<CheckBox> _driveChecks = [];
     private readonly ReleaseClient _releases = new();
     private readonly CancellationTokenSource _updateCancellation = new();
     private ReleaseInfo? _availableUpdate;
@@ -41,10 +42,73 @@ public sealed partial class MainWindow : Window
             _updateCancellation.Cancel();
             _releases.Dispose();
         };
+        PopulateDriveChoices();
         CurrentVersionText.Text = $"Installed version: {(typeof(MainWindow).Assembly.GetName().Version ?? ReleaseClient.InstalledVersion)}";
         RefreshRecoveryItems();
         // Do not hold up window activation or scanning for network access.
         _ = CheckForUpdatesAsync(manual: false);
+    }
+
+    private void PopulateDriveChoices()
+    {
+        var previous = _driveChecks.Where(c => c.IsChecked == true)
+            .Select(c => (string)c.Tag).ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var hadChoices = _driveChecks.Count > 0;
+        _driveChecks.Clear();
+        DriveChoicesPanel.Children.Clear();
+        var roots = DriveScanCatalog.GetFixedReadyRoots();
+        var systemRoot = Path.GetPathRoot(Environment.SystemDirectory) ?? "";
+        foreach (var root in roots)
+        {
+            var checkbox = new CheckBox
+            {
+                Content = root,
+                Tag = root,
+                IsChecked = hadChoices
+                    ? previous.Contains(root)
+                    : root.Equals(systemRoot, StringComparison.OrdinalIgnoreCase),
+                IsEnabled = AllDrivesCheckBox.IsChecked != true
+            };
+            checkbox.Checked += DriveChoice_Changed;
+            checkbox.Unchecked += DriveChoice_Changed;
+            _driveChecks.Add(checkbox);
+            DriveChoicesPanel.Children.Add(checkbox);
+        }
+        ScanSelectedDrivesButton.IsEnabled = roots.Count > 0 && _scanCancellation is null;
+        UpdateDriveSummary();
+    }
+
+    private void DriveChoice_Changed(object sender, RoutedEventArgs e) => UpdateDriveSummary();
+
+    private void AllDrives_Changed(object sender, RoutedEventArgs e)
+    {
+        if (DriveChoicesPanel is null) return; // XAML may raise this during initialization.
+        var all = AllDrivesCheckBox.IsChecked == true;
+        foreach (var checkbox in _driveChecks)
+            checkbox.IsEnabled = !all;
+        UpdateDriveSummary();
+    }
+
+    private void RefreshDrives_Click(object sender, RoutedEventArgs e)
+    {
+        if (_scanCancellation is not null) return;
+        PopulateDriveChoices();
+    }
+
+    private IReadOnlyList<string> GetSelectedDriveRoots() =>
+        AllDrivesCheckBox.IsChecked == true
+            ? _driveChecks.Select(c => (string)c.Tag).ToArray()
+            : _driveChecks.Where(c => c.IsChecked == true)
+                .Select(c => (string)c.Tag).ToArray();
+
+    private void UpdateDriveSummary()
+    {
+        if (SelectedDriveSummary is null) return;
+        var selected = GetSelectedDriveRoots();
+        SelectedDriveSummary.Text = selected.Count == 0
+            ? "No drives selected. Only ready fixed drives are available."
+            : "Selected for read-only scan: " + string.Join(", ", selected)
+              + ". No drive files can be removed from this page.";
     }
 
     private void OnNavigationChanged(NavigationView sender, NavigationViewSelectionChangedEventArgs args)
@@ -61,12 +125,22 @@ public sealed partial class MainWindow : Window
 
     private async void StartScan_Click(object sender, RoutedEventArgs e) => await StartScanAsync();
 
-    private async Task StartScanAsync()
+    private async void ScanSelectedDrives_Click(object sender, RoutedEventArgs e) => await StartScanAsync(includeSelectedDrives: true);
+
+    private async Task StartScanAsync(bool includeSelectedDrives = false)
     {
         if (_scanCancellation is not null) return;
+        IReadOnlyList<string> selectedDriveRoots = includeSelectedDrives
+            ? GetSelectedDriveRoots() : Array.Empty<string>();
+        if (includeSelectedDrives && selectedDriveRoots.Count == 0)
+        {
+            SelectedDriveSummary.Text = "Select at least one available fixed drive or All fixed drives.";
+            return;
+        }
         using var cts = new CancellationTokenSource();
         _scanCancellation = cts;
         RefreshButton.IsEnabled = false;
+        ScanSelectedDrivesButton.IsEnabled = false;
         CancelButton.IsEnabled = true;
         ScanRing.IsActive = true;
         ScanStatusText.Text = "Preparing scan...";
@@ -83,7 +157,7 @@ public sealed partial class MainWindow : Window
         });
         try
         {
-            var snapshot = await _scanner.ScanAsync(progress, cts.Token);
+            var snapshot = await _scanner.ScanAsync(progress, cts.Token, selectedDriveRoots);
             if (cts.IsCancellationRequested) return;
             _snapshot = snapshot;
             ShowResults(snapshot);
@@ -118,6 +192,7 @@ public sealed partial class MainWindow : Window
             if (_scanCancellation == cts) _scanCancellation = null;
             ScanRing.IsActive = false;
             RefreshButton.IsEnabled = true;
+            ScanSelectedDrivesButton.IsEnabled = _driveChecks.Count > 0;
             CancelButton.IsEnabled = false;
         }
     }
@@ -155,16 +230,45 @@ public sealed partial class MainWindow : Window
         FolderList.ItemsSource = result.Folders.Select(f => new FolderRow(f)).ToArray();
         var temp = result.Folders.FirstOrDefault(f => !f.IsPersonalData);
         var downloads = result.Folders.FirstOrDefault(f => f.IsPersonalData);
+        var selectedDrives = result.Folders.Where(f => f.Label.StartsWith("Drive ",
+            StringComparison.Ordinal)).ToArray();
         StorageSummary.Text = $"Downloads: {Formatting.Bytes(downloads?.Bytes)} · "
                             + $"Temporary folder: {Formatting.Bytes(temp?.Bytes)}. "
-                            + (result.Folders.Any(f => f.Truncated || f.SkippedEntries > 0)
-                                ? "Some directories were inaccessible or reached a scan limit."
-                                : "Both folders were measured without modifying anything.");
-        WarningsList.ItemsSource = result.Warnings.Count > 0
-            ? result.Warnings
-            : ["No folder measurement errors were reported. Dependency discovery is still limited to explicit .NET runtime declarations."];
+                            + (selectedDrives.Length == 0
+                                ? "Choose fixed drives under Files & storage for a bounded drive-wide inventory."
+                                : string.Join("; ", selectedDrives.Select(f => f.Label + ": "
+                                    + Formatting.Bytes(f.Bytes)
+                                    + (f.Truncated || f.Issues.Any(i => !i.IsExpected)
+                                        ? " measured (partial lower bound)" : " measured (read-only)"))));
+        var runtimes = RuntimeUsageAnalyzer.Build(result.Applications, result.Dependencies)
+            .Select(r => new RuntimeUsageRow(r)).ToArray();
+        RuntimeList.ItemsSource = runtimes;
+        RuntimeSummary.Text = runtimes.Length == 0
+            ? "No recognized .NET Core runtime entries found in Windows uninstall records. This does not prove that none are installed."
+            : runtimes.Length.ToString("N0") + " registered .NET runtimes detected. Select one to see applications declaring that runtime family.";
+        RuntimeDetails.Text = runtimes.Length == 0
+            ? "Try a scan with installed .NET applications, but lack of evidence never justifies removal."
+            : "Select a runtime to see the app declarations and evidence paths. Unknown or unobserved use remains protected.";
+
+        var issueLines = result.Folders.SelectMany(folder =>
+            folder.Issues.Select(issue =>
+                (issue.IsExpected ? "Expected exclusion" : "Partial scan")
+                + ": " + folder.Label + " — " + issue.Path + " — " + issue.Reason)).ToList();
+        if (result.Warnings.Count > 0)
+            issueLines.InsertRange(0, result.Warnings);
+        WarningsList.ItemsSource = issueLines.Count > 0
+            ? issueLines
+            : ["No paths were skipped. Undeclared or dynamically loaded dependencies can still exist."];
         AppListSubtitle.Text = $"{result.Applications.Count:N0} registered entries · "
                              + "Registry size estimates may be missing or inaccurate.";
+    }
+
+    private void RuntimeList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (RuntimeDetails is null) return;
+        RuntimeDetails.Text = RuntimeList.SelectedItem is RuntimeUsageRow row
+            ? row.Details
+            : "Select a runtime to view declarations. A blank list never proves a component is unused.";
     }
 
     private void AppsSearch_TextChanged(object sender, TextChangedEventArgs e) => ApplyAppFilter();

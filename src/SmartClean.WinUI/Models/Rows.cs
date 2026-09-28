@@ -21,7 +21,9 @@ public sealed class FolderRow
     public string Path => Finding.Path;
     public string Size => Formatting.Bytes(Finding.Bytes);
     public string Detail => $"{Finding.Files:N0} files · {Finding.OldFiles:N0} modified over 180 days ago";
-    public string Flag => Finding.Truncated ? "Partial scan" : Finding.IsPersonalData ? "Personal files" : "Review only";
+    public string Flag => Finding.Truncated || Finding.Issues.Any(i => !i.IsExpected)
+        ? "Partial · read-only" : Finding.Label.StartsWith("Drive ", StringComparison.Ordinal)
+            ? "Read-only drive inventory" : Finding.IsPersonalData ? "Personal files" : "Review only";
     public FolderRow(FolderFinding finding) => Finding = finding;
 }
 
@@ -55,4 +57,19 @@ public sealed class RecoveryRow
     public string Detail => $"Moved {Item.MovedAtUtc.LocalDateTime:MMM d, yyyy · h:mm tt} · {Formatting.Bytes(Item.Bytes)}";
     public string OriginalPath => Item.OriginalPath;
     public RecoveryRow(RecoveryItem item) => Item = item;
+}
+
+public sealed class RuntimeUsageRow
+{
+    public RuntimeUsage Usage { get; }
+    public string Name => Usage.RuntimeName;
+    public string Framework => Usage.FrameworkName + " · installed " + Usage.InstalledVersion;
+    public string Summary => Usage.DeclaredDependents.Count == 0
+        ? "No matching declarations observed — keep protected"
+        : Usage.DeclaredDependents.Count + " app declaration(s) in the matching runtime family";
+    public string Details => Usage.DeclaredDependents.Count == 0
+        ? "This limited scan did not find an app declaring this runtime. That is NOT evidence it is unused."
+        : string.Join("\n", Usage.DeclaredDependents.Select(d =>
+            "• " + d.AppName + " (requests " + d.RequestedVersion + ")\n  Evidence: " + d.EvidencePath));
+    public RuntimeUsageRow(RuntimeUsage usage) => Usage = usage;
 }

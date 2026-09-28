@@ -4,14 +4,17 @@ public sealed class ScanCoordinator
 {
     public async Task<ScanSnapshot> ScanAsync(
         IProgress<string>? progress = null,
-        CancellationToken cancellationToken = default)
+        CancellationToken cancellationToken = default,
+        IReadOnlyList<string>? selectedFixedDriveRoots = null)
     {
         // All expensive IO stays outside the UI thread.
-        return await Task.Run(() => Scan(progress, cancellationToken), cancellationToken)
+        return await Task.Run(() => Scan(progress, cancellationToken,
+            selectedFixedDriveRoots ?? []), cancellationToken)
             .ConfigureAwait(false);
     }
 
-    private static ScanSnapshot Scan(IProgress<string>? progress, CancellationToken ct)
+    private static ScanSnapshot Scan(IProgress<string>? progress, CancellationToken ct,
+        IReadOnlyList<string> selectedFixedDriveRoots)
     {
         var warnings = new List<string>();
         progress?.Report("Reading installed applications...");
@@ -21,7 +24,21 @@ public sealed class ScanCoordinator
         var dependencies = new DependencyInspector().Inspect(apps, ct);
         ct.ThrowIfCancellationRequested();
         progress?.Report("Measuring Downloads and temporary folders...");
-        var folders = new FolderScanner().Scan(FolderScanner.DefaultTargets(), ct);
+        var scanner = new FolderScanner();
+        var folders = scanner.Scan(FolderScanner.DefaultTargets(), ct).ToList();
+        ct.ThrowIfCancellationRequested();
+        if (selectedFixedDriveRoots.Count > 0)
+        {
+            var drives = DriveScanCatalog.SelectFixedRoots(
+                DriveScanCatalog.GetFixedReadyRoots(), selectedFixedDriveRoots);
+            foreach (var drive in drives)
+            {
+                ct.ThrowIfCancellationRequested();
+                progress?.Report("Measuring " + drive.Label + " (read-only, bounded)...");
+                folders.AddRange(scanner.Scan([drive], ct,
+                    maxEntriesPerRoot: DriveScanCatalog.DriveEntryLimit));
+            }
+        }
         ct.ThrowIfCancellationRequested();
         progress?.Report("Reading drive capacity...");
         var disks = new List<DiskFinding>();
@@ -38,10 +55,15 @@ public sealed class ScanCoordinator
         }
         // Zero observed declarations is expected for many installations;
         // it is a scope limitation, not a failed scan. Protection explains it.
-        if (folders.Any(f => f.Truncated || f.SkippedEntries > 0))
-             warnings.Add(string.Join("; ", folders.Where(f => f.Truncated || f.SkippedEntries > 0)
-                .Select(f => $"{f.Label}: {f.SkippedEntries:N0} skipped entries"
-                    + (f.Truncated ? " (scan entry limit reached)" : ""))));
+        // Linked paths intentionally skipped do not trigger an alarming warning.
+        // Each path and its reason remains visible on Protection.
+        foreach (var folder in folders)
+        {
+            var unexpected = folder.Issues.Count(i => !i.IsExpected);
+            if (unexpected > 0 || folder.Truncated)
+                warnings.Add($"{folder.Label}: {unexpected:N0} unreadable/truncated issue(s)"
+                    + (folder.Truncated ? "; entry limit reached; measured bytes are a lower bound" : ""));
+        }
         progress?.Report("Scan complete. No files or applications were modified.");
         return new ScanSnapshot(DateTimeOffset.Now, apps, dependencies, folders, disks, warnings);
     }

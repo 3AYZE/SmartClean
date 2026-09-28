@@ -10,6 +10,12 @@
 6. No untrusted package source, telemetry, silent cleanup, embedded GitHub token or silent EXE replacement. Main-branch source pushes trigger test/build/release, but the installed application requires the user's approval before running a verified update.
 7. These protections reduce accidental data loss. They are not a sandbox against software with full access to the same user's account or against malicious edits to the recovery journal.
 
+## Read-only drive scan and dependency evidence
+
+- Only selected ready fixed local drive roots are accepted; selection is validated again before scanning. Every drive-wide scan is bounded to 45,000 entries, cancelable, read-only and never expands file deletion beyond the approved temp-folder allowlist. Network/removable drives and arbitrary path inputs are excluded.
+- A .NET runtime usage relationship means an inspected registered application explicitly requests the matching framework major/minor via its runtimeconfig file. Do not describe the relationship as proof a specific installed patch was loaded, and never remove an unobserved runtime automatically.
+- Capture a bounded list of excluded filesystem paths and reasons. Linked paths are intentionally skipped without an alarming warning; unreadable paths and truncated totals indicate partial coverage and must be labeled accordingly.
+
 ## Automated core checks
 
 - [x] Shared runtimes remain protected even without observed dependent apps.

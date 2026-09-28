@@ -206,6 +206,27 @@
                         <TextBlock Text="Files &amp; storage" Style="{StaticResource TitleTextBlockStyle}" />
                         <TextBlock Text="Measure known folders without opening, moving or deleting their contents. Linked folders are skipped."
                                    Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                        <Border Background="{ThemeResource SmartCardBackground}"
+                                BorderBrush="{ThemeResource SmartCardStroke}" BorderThickness="1"
+                                CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Choose drives to inspect" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock Text="Select C:, D:, additional fixed drives, or All fixed drives. This measures storage only. It never adds drive files to the cleanup deletion list."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <CheckBox x:Name="AllDrivesCheckBox" Content="All fixed drives"
+                                          Checked="AllDrives_Changed" Unchecked="AllDrives_Changed" />
+                                <StackPanel x:Name="DriveChoicesPanel" Spacing="5" />
+                                <TextBlock x:Name="SelectedDriveSummary" Text="Loading available local drives..."
+                                           FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="10">
+                                    <Button x:Name="ScanSelectedDrivesButton" Content="Scan selected drives"
+                                            Click="ScanSelectedDrives_Click" Style="{StaticResource AccentButtonStyle}" />
+                                    <Button Content="Refresh drive list" Click="RefreshDrives_Click" />
+                                </StackPanel>
+                                <TextBlock Text="Each drive has a scan entry limit. An incomplete scan is marked partial; symbolic links and junctions are never followed. Network and removable drives are excluded."
+                                           FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
                         <ListView x:Name="FolderList" SelectionMode="None" IsItemClickEnabled="False">
                             <ListView.ItemTemplate>
                                 <DataTemplate x:DataType="models:FolderRow">
@@ -359,8 +380,37 @@
                                 <TextBlock Text="• App removal: Windows Settings handles uninstallation; registry commands are never executed" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Installed .NET runtimes and their applications" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock Text="For example, Microsoft .NET Runtime 9 shows applications whose runtimeconfig files request the .NET 9 runtime family. A declaration does not prove which exact patch was actually loaded."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <TextBlock x:Name="RuntimeSummary" Text="Run a scan to inspect registered .NET runtimes and recorded app requirements."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <ListView x:Name="RuntimeList" SelectionMode="Single" MaxHeight="290"
+                                          SelectionChanged="RuntimeList_SelectionChanged">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:RuntimeUsageRow">
+                                            <StackPanel Spacing="3" Padding="3,5">
+                                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                <TextBlock Text="{x:Bind Framework}" FontSize="12"
+                                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                                <TextBlock Text="{x:Bind Summary}" FontSize="12"
+                                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                                <TextBlock Text="Matching application declarations" FontWeight="SemiBold" />
+                                <TextBlock x:Name="RuntimeDetails" Text="Select a runtime above to see which detected apps declare it and the exact file supporting each relationship."
+                                           IsTextSelectionEnabled="True" TextWrapping="Wrap" />
+                                <TextBlock Text="No detected dependents never means safe to uninstall. Portable apps, native DLLs, optional paths, and runtime roll-forward remain unverified."
+                                           FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
                         <TextBlock Text="Scan limitations" FontSize="17" FontWeight="SemiBold" Margin="0,6,0,0" />
-                        <TextBlock Text="The dependency inspector currently reads bounded .NET runtimeconfig files in registered install locations. Native DLL loading, optional features, portable apps and most non-.NET dependency relationships are not yet verified."
+                        <TextBlock Text="The dependency inspector reads bounded runtimeconfig files within registered install folders. Native DLL loading, optional features, unregistered portable apps and most non-.NET relationships are not verified. The exact scan exclusions are listed below."
                                    TextWrapping="Wrap" />
                         <ListView x:Name="WarningsList" SelectionMode="None" IsItemClickEnabled="False" />
                     </StackPanel>

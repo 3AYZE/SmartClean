@@ -23,6 +23,8 @@ public sealed record DependencyEvidence(
 
 public sealed record FolderTarget(string Label, string Path, bool IsPersonalData);
 
+public sealed record ScanIssue(string Path, string Reason, bool IsExpected);
+
 public sealed record FolderFinding(
     string Label,
     string Path,
@@ -32,7 +34,12 @@ public sealed record FolderFinding(
     int SkippedEntries,
     bool Truncated,
     bool IsPersonalData,
-    string Recommendation);
+    string Recommendation)
+{
+    // A bounded path-and-reason preview. Linked paths are routine exclusions;
+    // inaccessible paths and entry-budget truncation indicate partial coverage.
+    public IReadOnlyList<ScanIssue> Issues { get; init; } = [];
+}
 
 public sealed record DiskFinding(string Name, long CapacityBytes, long FreeBytes);
 
