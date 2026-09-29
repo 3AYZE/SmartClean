@@ -52,7 +52,7 @@ if "%SDK_MAJOR%"=="10" (
 
 echo.
 echo ===============================================
-echo SmartClean 0.1.4 - read-only Windows build
+echo SupaClean 0.1.4 - read-only Windows build
 echo Target: %TARGET%  Framework: %SDK_TARGET%  SDK: %SDK_VERSION%
 echo ===============================================
 echo.

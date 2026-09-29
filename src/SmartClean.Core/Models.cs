@@ -53,5 +53,6 @@ public sealed record ScanSnapshot(
 {
     public int ProtectedAppCount => Applications.Count(a => a.IsProtected);
     public ComponentInspection OtherComponentScan { get; init; } = new([], 0, 0, 0);
+    public ServiceInspection ServiceScan { get; init; } = new([], 0, 0);
     public int ObservedDependencyCount => Dependencies.Count + OtherComponentScan.Evidence.Count;
 }

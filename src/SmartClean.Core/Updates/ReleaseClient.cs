@@ -16,6 +16,9 @@ public sealed record ReleaseInfo(Version Version, string Tag, Uri InstallerUrl,
 /// </summary>
 public sealed class ReleaseClient : IDisposable
 {
+    // Legacy release filename is intentional: installed SmartClean 0.3.x
+    // requires this exact asset name and URL for the first SupaClean update.
+    // There is still only ONE downloadable release EXE.
     public const string AssetName = "SmartClean-Setup.exe";
     public const string OwnerAndRepo = "3AYZE/SmartClean";
     private static readonly Uri LatestReleaseUri =
@@ -28,7 +31,7 @@ public sealed class ReleaseClient : IDisposable
     {
         _ownsClient = http is null;
         _http = http ?? new HttpClient { Timeout = TimeSpan.FromMinutes(20) };
-        _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SmartClean", "0.3"));
+        _http.DefaultRequestHeaders.UserAgent.Add(new ProductInfoHeaderValue("SupaClean", "0.4"));
         _http.DefaultRequestHeaders.Accept.Add(new MediaTypeWithQualityHeaderValue("application/vnd.github+json"));
     }
 
@@ -89,7 +92,7 @@ public sealed class ReleaseClient : IDisposable
             return new ReleaseInfo(version, tag, uri, digest[7..].ToLowerInvariant(), size,
                 new Uri($"https://github.com/{OwnerAndRepo}/releases/tag/{Uri.EscapeDataString(tag)}"));
         }
-        throw new UpdateException("The release contains no SmartClean-Setup.exe installer.");
+        throw new UpdateException("The release has no compatible SupaClean installer (legacy filename SmartClean-Setup.exe).");
     }
 
     public async Task<string> DownloadAndVerifyAsync(ReleaseInfo release,

@@ -8,7 +8,11 @@ public sealed record SharedComponentIdentity(string Family, string Category, str
 // NOT proof that the separately registered runtime package supplied it.
 public sealed record SharedComponentUsage(
     string Id, string Name, string Category, string Family, string Architecture,
-    string InstalledVersion, bool Registered, IReadOnlyList<ComponentEvidence> Evidence);
+    string InstalledVersion, bool Registered, IReadOnlyList<ComponentEvidence> Evidence)
+{
+    // Related installer entries (e.g. Python core, libraries and PATH feature).
+    public IReadOnlyList<string> InstallerParts { get; init; } = [];
+}
 
 public static class SharedComponentAnalyzer
 {
@@ -66,11 +70,37 @@ public static class SharedComponentAnalyzer
         var output = new List<SharedComponentUsage>();
         var recognized = apps.Select(app => (App: app, Identity: RecognizeInstalled(app.Name)))
             .Where(x => x.Identity is not null).ToArray();
-        foreach (var (app, maybeIdentity) in recognized)
+        var recognizedGroups = recognized.GroupBy(item =>
         {
-            var identity = maybeIdentity!;
+            var identity = item.Identity!;
+            // Python's core interpreter, PATH and development libraries often
+            // share one underlying installation; side-by-side architectures and
+            // per-user vs per-machine installations remain separate.
+            if (identity.Family.StartsWith("python", StringComparison.OrdinalIgnoreCase))
+            {
+                var scope = item.App.RegistryLocation.StartsWith("CurrentUser",
+                    StringComparison.OrdinalIgnoreCase) ? "user" : "machine";
+                return "python|" + identity.Family + "|" + identity.Architecture
+                    + "|" + item.App.Version + "|" + scope;
+            }
+            return "individual|" + item.App.Id;
+        }, StringComparer.OrdinalIgnoreCase);
+        foreach (var group in recognizedGroups)
+        {
+            var entries = group.ToArray();
+            var preferred = entries.OrderBy(x => x.App.Name.Contains("Add to Path",
+                        StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+                .ThenBy(x => x.App.Name.Contains("Core Interpreter",
+                    StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+                .ThenBy(x => x.App.Name.Contains("Development Libraries",
+                    StringComparison.OrdinalIgnoreCase) ? 1 : 0)
+                .ThenBy(x => x.App.Name.Length)
+                .First();
+            var app = preferred.App;
+            var identity = preferred.Identity!;
+            var ownIds = entries.Select(x => x.App.Id).ToHashSet(StringComparer.OrdinalIgnoreCase);
             var related = evidence.Where(x =>
-                x.AppId != app.Id
+                !ownIds.Contains(x.AppId)
                 && x.Family.Equals(identity.Family, StringComparison.OrdinalIgnoreCase)
                 && (identity.Architecture == "any" || x.Architecture == "any"
                     || x.Architecture == identity.Architecture))
@@ -78,7 +108,12 @@ public static class SharedComponentAnalyzer
                 .OrderBy(x => x.AppName, StringComparer.CurrentCultureIgnoreCase)
                 .ToArray();
             output.Add(new SharedComponentUsage(app.Id, app.Name, identity.Category,
-                identity.Family, identity.Architecture, app.Version, true, related));
+                identity.Family, identity.Architecture, app.Version, true, related)
+            {
+                InstallerParts = entries.OrderBy(x => x.App.Name,
+                    StringComparer.CurrentCultureIgnoreCase)
+                    .Select(x => x.App.Name).ToArray()
+            });
         }
 
         // Detect use even if no matching install is visible in uninstall records

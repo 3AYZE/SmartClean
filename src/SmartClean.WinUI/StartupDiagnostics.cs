@@ -38,10 +38,10 @@ internal static class StartupDiagnostics
         try
         {
             MessageBoxW(IntPtr.Zero,
-                $"SmartClean could not start ({stage}).\n\n" +
+                $"SupaClean could not start ({stage}).\n\n" +
                 $"Details were saved to:\n{LogFile}\n\n" +
                 "If no log was created, run Run-SmartClean-Diagnostics.cmd.",
-                "SmartClean startup error", 0x00000010);
+                "SupaClean startup error", 0x00000010);
         }
         catch (Exception) { /* A native loader error may prevent displaying a dialog. */ }
     }

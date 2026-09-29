@@ -210,6 +210,41 @@ finally
         Directory.Delete(componentFixture, recursive: true);
 }
 
+// SupaClean groups installation fragments without conflating side-by-side architectures.
+// Grouped apps must retain their real registry IDs; absent inbound evidence is not proof of disuse.
+var pythonParts = new[]
+{
+    new InstalledApp("py-main", "Python 3.14.7 (64-bit)", "Python Software Foundation",
+        "3.14.7150.0", @"C:\Python314", null, null, "LocalMachine/Test", true, "protected", null),
+    new InstalledApp("py-path", "Python 3.14.7 Add to Path (64-bit)", "Python Software Foundation",
+        "3.14.7150.0", @"C:\Python314", null, null, "LocalMachine/Test", true, "protected", null),
+    new InstalledApp("py-libs", "Python 3.14.7 Development Libraries (64-bit)",
+        "Python Software Foundation", "3.14.7150.0", @"C:\Python314", null, null,
+        "LocalMachine/Test", true, "protected", null),
+    new InstalledApp("py-x86", "Python 3.14.7 (32-bit)", "Python Software Foundation",
+        "3.14.7150.0", @"C:\Python314-32", null, null, "CurrentUser/Test", true, "protected", null)
+};
+var pyGrouped = SharedComponentAnalyzer.Build(pythonParts, []);
+Check(pyGrouped.Count == 2
+      && pyGrouped.Single(x => x.Architecture == "x64").InstallerParts.Count == 3
+      && pyGrouped.Single(x => x.Architecture == "x64").Name == "Python 3.14.7 (64-bit)"
+      && pyGrouped.Single(x => x.Architecture == "x86").InstallerParts.Count == 1,
+    "Python installer fragments grouped by version, architecture and install scope");
+
+if (OperatingSystem.IsWindows())
+{
+    string? parsed = ServiceRelationshipInspector.ParseExecutablePath(
+        @"""C:\Program Files\Example\helper.exe"" -service");
+    Check(parsed == Path.GetFullPath(@"C:\Program Files\Example\helper.exe"),
+        "Quoted service ImagePath parsed as a path, not executed");
+    parsed = ServiceRelationshipInspector.ParseExecutablePath(
+        @"C:\Windows\System32\svchost.exe -k LocalService");
+    Check(parsed == Path.GetFullPath(@"C:\Windows\System32\svchost.exe"),
+        "Windows service paths with arguments are parsed read-only");
+    Check(ServiceRelationshipInspector.ParseExecutablePath("powershell -Command anything") is null,
+        "Commands without a fully qualified executable path are rejected");
+}
+
 var scratch = Path.Combine(Path.GetTempPath(), "smartclean-tests-" + Guid.NewGuid().ToString("N"));
 Directory.CreateDirectory(scratch);
 try

@@ -4,7 +4,7 @@
     xmlns="http://schemas.microsoft.com/winfx/2006/xaml/presentation"
     xmlns:x="http://schemas.microsoft.com/winfx/2006/xaml"
     xmlns:models="using:SmartClean.WinUI.Models"
-    Title="SmartClean">
+    Title="SupaClean">
     <Window.SystemBackdrop>
         <MicaBackdrop Kind="Base" />
     </Window.SystemBackdrop>
@@ -16,8 +16,8 @@
         <Grid x:Name="TitleBarArea" Grid.Row="0" Padding="20,0">
             <StackPanel Orientation="Horizontal" VerticalAlignment="Center" Spacing="10">
                 <FontIcon Glyph="&#xE8B7;" FontSize="19" Foreground="{ThemeResource SmartAccent}" />
-                <TextBlock Text="SmartClean" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
-                <TextBlock Text="Preview 0.3" Foreground="{ThemeResource SmartSubtleText}"
+                <TextBlock Text="SupaClean" FontSize="14" FontWeight="SemiBold" VerticalAlignment="Center" />
+                <TextBlock Text="Preview 0.4" Foreground="{ThemeResource SmartSubtleText}"
                            FontSize="12" VerticalAlignment="Center" Margin="8,0,0,0" />
             </StackPanel>
         </Grid>
@@ -40,6 +40,9 @@
                 <NavigationViewItem Content="Cleanup" Tag="cleanup">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Delete" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
+                <NavigationViewItem Content="Dependencies" Tag="dependencies">
+                    <NavigationViewItem.Icon><SymbolIcon Symbol="Link" /></NavigationViewItem.Icon>
+                </NavigationViewItem>
                 <NavigationViewItem Content="Protection" Tag="safety">
                     <NavigationViewItem.Icon><SymbolIcon Symbol="Permissions" /></NavigationViewItem.Icon>
                 </NavigationViewItem>
@@ -53,7 +56,7 @@
                     <RowDefinition Height="*" />
                 </Grid.RowDefinitions>
                 <StackPanel Grid.Row="0" Spacing="4">
-                <InfoBar x:Name="UpdateInfo" Title="SmartClean update available" Severity="Informational" IsOpen="False" IsClosable="True" Margin="18,8,22,0">
+                <InfoBar x:Name="UpdateInfo" Title="SupaClean update available" Severity="Informational" IsOpen="False" IsClosable="True" Margin="18,8,22,0">
                     <InfoBar.ActionButton>
                         <Button Content="Review update" Click="ReviewUpdate_Click" />
                     </InfoBar.ActionButton>
@@ -264,7 +267,7 @@
                 <ScrollViewer x:Name="CleanupView" Grid.Row="1" Visibility="Collapsed">
                     <StackPanel MaxWidth="1010" HorizontalAlignment="Stretch" Padding="28,22,28,42" Spacing="16">
                         <TextBlock Text="Cleanup" Style="{StaticResource TitleTextBlockStyle}" />
-                        <TextBlock Text="Inspect the files SmartClean found, choose exactly what to keep or move, and review the list again before making changes. Nothing is selected or deleted automatically."
+                        <TextBlock Text="Inspect the files SupaClean found, choose exactly what to keep or move, and review the list again before making changes. Nothing is selected or deleted automatically."
                                    TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
                         <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
                                 BorderThickness="1" CornerRadius="12" Padding="20">
@@ -363,21 +366,40 @@
                     </StackPanel>
                 </ScrollViewer>
 
-                <!-- PROTECTION -->
-                <ScrollViewer x:Name="SafetyView" Grid.Row="1" Visibility="Collapsed">
+                <!-- DEPENDENCY RELATIONSHIPS: Evidence, not removal authorization -->
+                <ScrollViewer x:Name="DependenciesView" Grid.Row="1" Visibility="Collapsed">
                     <StackPanel MaxWidth="970" HorizontalAlignment="Stretch" Padding="28,22,28,42" Spacing="16">
-                        <TextBlock Text="Protection" Style="{StaticResource TitleTextBlockStyle}" />
-                        <TextBlock Text="Mandatory safeguards remain in place. Cleanup is limited to reviewed temporary-file candidates; application removal is Windows-managed."
+                        <TextBlock Text="Dependencies" Style="{StaticResource TitleTextBlockStyle}" />
+                        <TextBlock Text="Separate Windows service associations, shared runtime references and components with no detected dependents. Unknown use stays protected."
                                    Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
                         <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
                                 BorderThickness="1" CornerRadius="12" Padding="20">
                             <StackPanel Spacing="12">
-                                <TextBlock Text="Protected by design" FontSize="17" FontWeight="SemiBold" />
-                                <TextBlock Text="• Shared runtimes (.NET, Visual C++, WebView2, Java, Python, graphics, Windows App SDK) stay protected" TextWrapping="Wrap" />
-                                <TextBlock Text="• Unknown or unverified dependencies: never assumed safe" TextWrapping="Wrap" />
-                                <TextBlock Text="• Personal projects, Downloads and game saves: no automatic deletion" TextWrapping="Wrap" />
-                                <TextBlock Text="• Directory junctions and symbolic links: not followed by the folder scan" TextWrapping="Wrap" />
-                                <TextBlock Text="• App removal: Windows Settings handles uninstallation; registry commands are never executed" TextWrapping="Wrap" />
+                                <TextBlock Text="Windows and background services" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock Text="Shows which registered Windows services use executables from Windows directories or installed application folders. This does not prove those services need a particular runtime."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <TextBlock x:Name="ServiceSummary" Text="Run a scan to inspect available Windows service registrations." Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap"/>
+                                <ComboBox x:Name="ServiceFilter" Header="Show services" SelectionChanged="ServiceFilter_SelectionChanged"
+                                          SelectedIndex="0" MinWidth="240">
+                                    <ComboBoxItem Content="All observed services" />
+                                    <ComboBoxItem Content="Executable in Windows folder" />
+                                    <ComboBoxItem Content="Associated with installed apps" />
+                                    <ComboBoxItem Content="Unassociated" />
+                                </ComboBox>
+                                <ListView x:Name="ServiceList" MaxHeight="260" SelectionMode="Single"
+                                          SelectionChanged="ServiceList_SelectionChanged">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:ServiceRelationshipRow">
+                                            <StackPanel Spacing="3" Padding="3,5">
+                                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextWrapping="Wrap" />
+                                                <TextBlock Text="{x:Bind Category}" Foreground="{ThemeResource SmartSubtleText}" FontSize="12" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{x:Bind Summary}" Foreground="{ThemeResource SmartSubtleText}" FontSize="11"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                                <TextBlock x:Name="ServiceDetails" Text="Select a service to see its executable path and associated registered application, if identified."
+                                           IsTextSelectionEnabled="True" TextWrapping="Wrap"/>
                             </StackPanel>
                         </Border>
                         <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
@@ -409,6 +431,7 @@
                                            FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
                             </StackPanel>
                         </Border>
+                        <TextBlock Text="Select a shared component for its installer parts, app references and supporting evidence." Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap"/>
                         <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
                                 BorderThickness="1" CornerRadius="12" Padding="20">
                             <StackPanel Spacing="12">
@@ -437,7 +460,49 @@
                                 <TextBlock Text="No detected dependents never means safe to uninstall. Portable apps, native DLLs, optional paths, and runtime roll-forward remain unverified."
                                            FontSize="12" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
                             </StackPanel>
+                        </Border>                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="No detected dependents" FontSize="17" FontWeight="SemiBold"/>
+                                <TextBlock Text="These installed shared components have no matching application declarations or imports within the scan's limited coverage. They are NOT proven unused and cannot be automatically removed."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap"/>
+                                <TextBlock x:Name="UnreferencedSummary" Text="Scan to find shared components without observed dependents." Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap"/>
+                                <ListView x:Name="UnreferencedList" MaxHeight="280" SelectionMode="None">
+                                    <ListView.ItemTemplate>
+                                        <DataTemplate x:DataType="models:UnreferencedRow">
+                                            <StackPanel Spacing="3" Padding="3,5">
+                                                <TextBlock Text="{x:Bind Name}" FontWeight="SemiBold" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{x:Bind Type}" Foreground="{ThemeResource SmartSubtleText}" FontSize="12" TextWrapping="Wrap"/>
+                                                <TextBlock Text="{x:Bind Explanation}" FontSize="11" Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap"/>
+                                            </StackPanel>
+                                        </DataTemplate>
+                                    </ListView.ItemTemplate>
+                                </ListView>
+                            </StackPanel>
                         </Border>
+
+                    </StackPanel>
+                </ScrollViewer>
+
+                <!-- PROTECTION -->
+                <ScrollViewer x:Name="SafetyView" Grid.Row="1" Visibility="Collapsed">
+                    <StackPanel MaxWidth="970" HorizontalAlignment="Stretch" Padding="28,22,28,42" Spacing="16">
+                        <TextBlock Text="Protection" Style="{StaticResource TitleTextBlockStyle}" />
+                        <TextBlock Text="Mandatory safeguards remain in place. Cleanup is limited to reviewed temporary-file candidates; application removal is Windows-managed."
+                                   Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="12">
+                                <TextBlock Text="Protected by design" FontSize="17" FontWeight="SemiBold" />
+                                <TextBlock Text="• Shared runtimes (.NET, Visual C++, WebView2, Java, Python, graphics, Windows App SDK) stay protected" TextWrapping="Wrap" />
+                                <TextBlock Text="• Unknown or unverified dependencies: never assumed safe" TextWrapping="Wrap" />
+                                <TextBlock Text="• Personal projects, Downloads and game saves: no automatic deletion" TextWrapping="Wrap" />
+                                <TextBlock Text="• Directory junctions and symbolic links: not followed by the folder scan" TextWrapping="Wrap" />
+                                <TextBlock Text="• App removal: Windows Settings handles uninstallation; registry commands are never executed" TextWrapping="Wrap" />
+                            </StackPanel>
+                        </Border>
+
+
                         <TextBlock Text="Scan limitations" FontSize="17" FontWeight="SemiBold" Margin="0,6,0,0" />
                         <TextBlock Text="Dependency scanning reads bounded .NET runtime declarations, selected native PE imports and managed package references within registered installation folders. Dynamic loading, bundled DLLs, optional features and portable applications may remain unobserved. File-system exclusions are listed below."
                                    TextWrapping="Wrap" />
@@ -468,7 +533,7 @@
                             <StackPanel Spacing="12">
                                 <TextBlock Text="Application updates" FontWeight="SemiBold" FontSize="17" />
                                 <TextBlock x:Name="CurrentVersionText" Text="Installed version: 0.3" />
-                                <TextBlock x:Name="UpdateStatusText" Text="Checking for public GitHub releases when SmartClean starts."
+                                <TextBlock x:Name="UpdateStatusText" Text="Checking for public GitHub releases when SupaClean starts."
                                            Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
                                 <StackPanel Orientation="Horizontal" Spacing="10">
                                     <Button x:Name="CheckUpdatesButton" Content="Check for updates" Click="CheckUpdates_Click" />
@@ -477,7 +542,7 @@
                                 </StackPanel>
                                 <ProgressBar x:Name="UpdateDownloadBar" IsIndeterminate="False" Minimum="0" Maximum="100"
                                              Value="0" Height="6" Visibility="Collapsed" />
-                                <TextBlock Text="Every main-branch source update automatically produces a tested Windows installer release. SmartClean verifies its hash and requests approval before installing."
+                                <TextBlock Text="Every main-branch source update automatically produces a tested Windows installer release. SupaClean verifies its hash and requests approval before installing."
                                            FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
                             </StackPanel>
                         </Border>

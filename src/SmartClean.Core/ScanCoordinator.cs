@@ -26,6 +26,9 @@ public sealed class ScanCoordinator
         progress?.Report("Inspecting native DLL imports and package references...");
         var componentScan = new ComponentInspector().Inspect(apps, ct);
         ct.ThrowIfCancellationRequested();
+        progress?.Report("Reading Windows services and associated application paths...");
+        var services = new ServiceRelationshipInspector().Scan(apps, ct);
+        ct.ThrowIfCancellationRequested();
         progress?.Report("Measuring Downloads and temporary folders...");
         var scanner = new FolderScanner();
         var folders = scanner.Scan(FolderScanner.DefaultTargets(), ct).ToList();
@@ -70,7 +73,8 @@ public sealed class ScanCoordinator
         progress?.Report("Scan complete. No files or applications were modified.");
         return new ScanSnapshot(DateTimeOffset.Now, apps, dependencies, folders, disks, warnings)
         {
-            OtherComponentScan = componentScan
+            OtherComponentScan = componentScan,
+            ServiceScan = services
         };
     }
 }

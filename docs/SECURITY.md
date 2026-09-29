@@ -1,4 +1,4 @@
-# SmartClean 0.3 — safety model and Windows QA
+# SupaClean 0.4 — safety model and Windows QA
 
 ## Mandatory constraints
 
@@ -17,6 +17,18 @@
 - Native-component inspection reads bounded PE import descriptors and selected dependency manifests under registered install locations. It never executes binaries, follows linked roots, elevates privileges, or claims that a particular installed package supplied an imported DLL.
 - Visual C++ architectures match only compatible x86/x64 import evidence. Java, Python, WebView2, Windows App SDK and graphics components may be bundled or dynamically loaded; unmatched or unknown components remain protected.
 - Capture a bounded list of excluded filesystem paths and reasons. Linked paths are intentionally skipped without an alarming warning; unreadable paths and truncated totals indicate partial coverage and must be labeled accordingly.
+
+## Branding and relationship safety
+
+- The installer must preserve its existing AppId, binary name and install path
+  while adopting the SupaClean display name, so installed 0.3.x users receive
+  this version using the existing one-EXE release filename and update checker.
+- Windows services are read as registration metadata only. Matching an
+  executable to a registered install location demonstrates a folder association,
+  not proof that the service loads any particular dependency.
+- Python installer fragments are grouped conservatively by version, processor
+  architecture, and per-machine/per-user installation scope. An empty inbound
+  reference list is never a deletion recommendation.
 
 ## Automated core checks
 

@@ -1,13 +1,23 @@
-# SmartClean — Windows storage and dependency inspector
+# SupaClean — Windows storage and dependency inspector
 
 **Current source: 0.3; every successful main-branch push automatically publishes a new numbered Windows installer.** C# / WinUI 3 / Windows 11-style Fluent interface.
 
-SmartClean scans installed applications, explicit .NET runtime declarations, bounded native PE imports and managed package declarations, drive capacity, Downloads and the current user's temporary folder. It **does not infer that an unobserved dependency is absent**. Shared runtimes and drivers remain protected.
+SupaClean scans installed applications, explicit .NET runtime declarations, bounded native PE imports and managed package declarations, drive capacity, Downloads and the current user's temporary folder. It **does not infer that an unobserved dependency is absent**. Shared runtimes and drivers remain protected.
+
+## SupaClean name migration
+
+SupaClean is the new visible application name. The repository remains
+[3AYZE/SmartClean](https://github.com/3AYZE/SmartClean), the internal WinUI
+assembly remains SmartClean.WinUI, and the ONE downloadable installer remains
+**SmartClean-Setup.exe** for compatibility with the 0.3.x updater.
+The original installer AppId and installation directory are intentionally kept
+so the upgrade replaces the existing installation in place. Start Menu and
+desktop shortcuts are renamed; recovery and update history are preserved.
 
 ## What works in current source
 
 - **Overview:** app inventory, observed declarations, available space and a bounded folder scan. Folder errors identify affected folders.
-- **Applications:** search registered software, review known dependencies and open Windows Settings > Installed apps for a user-approved uninstall. SmartClean never executes uninstall strings from the registry.
+- **Applications:** search registered software, review known dependencies and open Windows Settings > Installed apps for a user-approved uninstall. SupaClean never executes uninstall strings from the registry.
 - **Cleanup:** inspect regular top-level .tmp, .temp, .log and .dmp files in your own LOCAL temporary folder. Eligible files must be at least 30 days old. The page shows eligible file names, locations, dates and sizes, plus read-only examples and counts for excluded files with specific reasons. Users select items, see the full review list, can uncheck individual entries and confirm before any move. No automatic removal.
 - **Recovery:** move only reviewed and revalidated candidates into a per-user vault on the same volume, journaling the original path. Select which Recovery files to restore or delete. The final deletion dialog lists every chosen file, original path and size, permits individual deselection, and requires explicit confirmation. Existing files are never overwritten on restore.
 - **Protection:** mandatory safeguards for shared runtimes, personal folders, linked paths and unknown dependencies. A second component inspector covers recognized registered Visual C++ (2013 and 2015–2022), WebView2, Windows App SDK, Java, Python, Vulkan and legacy DirectX components. It examines bounded, read-only native PE imports and managed dependency manifests for registered applications. Each relationship shows its supporting file and detection method. It cannot prove the exact installed redistributable was used, or that a runtime without evidence is unused.
@@ -20,6 +30,19 @@ SmartClean scans installed applications, explicit .NET runtime declarations, bou
 On Windows, install the .NET 10 SDK and run Build-Windows.cmd in the repository root. It produces the unpackaged multi-file application under output/SmartClean-win-x64. Start SmartClean.WinUI.exe **with its dependencies beside it**. If no window appears, run Run-SmartClean-Diagnostics.cmd.
 
 Run Test-Core-Windows.cmd to exercise runtime protection, bounded folder traversal, update integrity and the actual temporary-file move / restore / purge lifecycle.
+
+## Dependency relationships
+
+The new **Dependencies** page separates **Windows and background services**
+(read-only service executable registration, not framework use), **shared
+components** (.NET, Visual C++, WebView2, Java, Python, Windows App SDK and
+graphics libraries), and **No detected dependents**. Python installer fragments
+(core interpreter, development libraries and PATH option) are grouped by
+version, architecture and install scope. The services section associates
+registered executables with known application install folders and shows the
+actual path. No-reference results explicitly remain protected: lack of matching
+imports/declarations or unavailable installation evidence does NOT prove
+anything is unused. Automatic uninstall decisions remain disabled.
 
 ## Drive scans and .NET runtime relationships
 

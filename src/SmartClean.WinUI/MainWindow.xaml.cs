@@ -16,6 +16,7 @@ public sealed partial class MainWindow : Window
     private CancellationTokenSource? _scanCancellation;
     private ScanSnapshot? _snapshot;
     private AppRow[] _allApps = [];
+    private ServiceRelationshipRow[] _allServiceRows = [];
     private readonly List<CheckBox> _driveChecks = [];
     private readonly ReleaseClient _releases = new();
     private readonly CancellationTokenSource _updateCancellation = new();
@@ -119,6 +120,7 @@ public sealed partial class MainWindow : Window
         AppsView.Visibility = destination == "apps" ? Visibility.Visible : Visibility.Collapsed;
         FoldersView.Visibility = destination == "folders" ? Visibility.Visible : Visibility.Collapsed;
         CleanupView.Visibility = destination == "cleanup" ? Visibility.Visible : Visibility.Collapsed;
+        DependenciesView.Visibility = destination == "dependencies" ? Visibility.Visible : Visibility.Collapsed;
         SafetyView.Visibility = destination == "safety" ? Visibility.Visible : Visibility.Collapsed;
         SettingsView.Visibility = destination == "settings" ? Visibility.Visible : Visibility.Collapsed;
     }
@@ -262,6 +264,30 @@ public sealed partial class MainWindow : Window
               + result.OtherComponentScan.UninspectedApps.ToString("N0") + " registered apps without accessible install evidence.";
         OtherComponentDetails.Text = "Select a component to see observed imports and package references. Matching an import to an installed runtime family does not prove which redistributable supplied it.";
 
+        _allServiceRows = result.ServiceScan.Services
+            .Select(service => new ServiceRelationshipRow(service)).ToArray();
+        ServiceSummary.Text = result.ServiceScan.Services.Count.ToString("N0")
+            + " service executable registrations inspected out of "
+            + result.ServiceScan.Scanned.ToString("N0") + " entries · "
+            + result.ServiceScan.Unreadable.ToString("N0") + " unavailable. "
+            + "Associations are inferred from registered executable locations, not runtime-loading proof.";
+        ApplyServiceFilter();
+        var missingReferenceEntries = runtimes
+            .Where(row => row.Usage.DeclaredDependents.Count == 0)
+            .Select(row => new UnreferencedRow(row.Name, ".NET runtime",
+                "No explicit matching declarations found; still protected."))
+            .Concat(otherComponents
+                .Where(row => row.Usage.Registered && row.Usage.Evidence.Count == 0)
+                .Select(row => new UnreferencedRow(row.Name, row.Usage.Category,
+                    "No matching native imports or package declarations found; still protected.")))
+            .OrderBy(row => row.Type, StringComparer.CurrentCultureIgnoreCase)
+            .ThenBy(row => row.Name, StringComparer.CurrentCultureIgnoreCase)
+            .ToArray();
+        UnreferencedList.ItemsSource = missingReferenceEntries;
+        UnreferencedSummary.Text = missingReferenceEntries.Length.ToString("N0")
+            + " installed shared component groups have no dependents observed in the limited scan. "
+            + "Unknown, bundled, optional and rarely used dependencies remain possible.";
+
         var issueLines = result.Folders.SelectMany(folder =>
             folder.Issues.Select(issue =>
                 (issue.IsExpected ? "Expected exclusion" : "Partial scan")
@@ -275,11 +301,43 @@ public sealed partial class MainWindow : Window
                              + "Registry size estimates may be missing or inaccurate.";
     }
 
+    private void ServiceFilter_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        // A ComboBox may fire its initial event before the rest of the XAML tree exists.
+        if (ServiceList is null || ServiceFilter is null) return;
+        ApplyServiceFilter();
+    }
+
+    private void ApplyServiceFilter()
+    {
+        if (ServiceList is null || ServiceFilter is null) return;
+        var filtered = ServiceFilter.SelectedIndex switch
+        {
+            1 => _allServiceRows.Where(row => row.Service.ExecutableUnderWindows),
+            2 => _allServiceRows.Where(row => row.Service.AssociatedAppId is not null),
+            3 => _allServiceRows.Where(row => row.Service.AssociatedAppId is null
+                && !row.Service.ExecutableUnderWindows),
+            _ => _allServiceRows.AsEnumerable()
+        };
+        ServiceList.ItemsSource = filtered.Take(250).ToArray();
+        if (ServiceDetails is not null)
+            ServiceDetails.Text = "Select a service to see its executable and registered-app association. "
+                + "Only the first 250 matching registrations are displayed.";
+    }
+
+    private void ServiceList_SelectionChanged(object sender, SelectionChangedEventArgs e)
+    {
+        if (ServiceDetails is null) return;
+        ServiceDetails.Text = ServiceList.SelectedItem is ServiceRelationshipRow row
+            ? row.Details
+            : "Select a service. Its registered executable path does not prove a specific runtime dependency.";
+    }
+
     private void OtherComponentList_SelectionChanged(object sender, SelectionChangedEventArgs e)
     {
         if (OtherComponentDetails is null) return;
         OtherComponentDetails.Text = OtherComponentList.SelectedItem is SharedComponentRow row
-            ? row.Details
+            ? (row.InstallerParts.Length > 0 ? row.InstallerParts + "\n\n" : "") + row.Details
             : "Select a component. Missing observed references never prove a component is unused.";
     }
 
@@ -330,6 +388,14 @@ public sealed partial class MainWindow : Window
         DetailDependencies.Text = detailLines.Length == 0
             ? "No declarations or matching imports found in the bounded scan. Unknown or dynamically loaded dependencies may still exist."
             : string.Join("\n\n", detailLines);
+        var ownedServices = _snapshot.ServiceScan.Services
+            .Where(service => service.AssociatedAppId == app.Id)
+            .Take(12).ToArray();
+        if (ownedServices.Length > 0)
+            DetailDependencies.Text += "\n\nRegistered services associated with this installation:\n"
+                + string.Join("\n", ownedServices.Select(service =>
+                    "• " + service.DisplayName + " (" + service.ServiceName + ")"
+                    + "\n  Executable: " + service.ExecutablePath));
         DetailLocation.Text = app.InstallLocation ?? "Not reported in uninstall registry.";
         OpenWindowsUninstallButton.IsEnabled = !app.IsProtected;
     }
@@ -506,7 +572,7 @@ public sealed partial class MainWindow : Window
         if (selected.Length == 0) return;
         var approved = await ReviewExactFilesAsync(
             "Review files to move into Recovery",
-            "Uncheck anything you want to keep. SmartClean revalidates each selected file. "
+            "Uncheck anything you want to keep. SupaClean revalidates each selected file. "
             + "This move is reversible and does NOT free disk space.",
             selected,
             x => Path.GetFileName(x.FullPath),
@@ -650,9 +716,9 @@ public sealed partial class MainWindow : Window
     {
         if (AppList.SelectedItem is not AppRow row || row.App.IsProtected) return;
         if (!await AskConfirmationAsync("Review uninstall in Windows",
-            $"{row.Name}\n\nSmartClean has NOT verified all dependency relationships. "
+            $"{row.Name}\n\nSupaClean has NOT verified all dependency relationships. "
             + "Windows will perform the actual uninstall, if you choose it there. "
-            + "SmartClean will never execute a command stored in the uninstall registry.",
+            + "SupaClean will never execute a command stored in the uninstall registry.",
             "Open Windows Settings")) return;
         try
         {
@@ -746,7 +812,7 @@ public sealed partial class MainWindow : Window
             // Consent happened when clicking Download and install. Never run arbitrary URLs.
             // Inno Setup installs per-user and prompts to close in-use programs if needed.
             Process.Start(new ProcessStartInfo(installer) { UseShellExecute = true });
-            UpdateStatusText.Text = "Installer opened. Close SmartClean when requested to finish updating.";
+            UpdateStatusText.Text = "Installer opened. Close SupaClean when requested to finish updating.";
         }
         catch (OperationCanceledException)
         {

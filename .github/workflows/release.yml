@@ -1,4 +1,4 @@
-name: Build and release Windows EXE
+name: Build and release SupaClean for Windows
 on:
   push:
     branches: [ main ]
@@ -28,7 +28,7 @@ jobs:
           $version = "$($base.Major).$($base.Minor).$($base.Build).$revision"
           "version=$version" >> $env:GITHUB_OUTPUT
           "tag=v$version" >> $env:GITHUB_OUTPUT
-          Write-Host "Building SmartClean $version for commit $env:GITHUB_SHA"
+          Write-Host "Building SupaClean $version for commit $env:GITHUB_SHA"
       - name: Restore
         shell: pwsh
         run: >-
@@ -83,5 +83,5 @@ jobs:
             exit 0
           }
           $tag = '${{ steps.version.outputs.tag }}'
-          gh release create "$tag" 'output/releases/SmartClean-Setup.exe' --target "$built" --title "SmartClean $tag" --notes "Automatically compiled from main ($built). Safety tests passed. One Windows installer asset; users approve each update." --latest
+          gh release create "$tag" 'output/releases/SmartClean-Setup.exe' --target "$built" --title "SupaClean $tag" --notes "Automatically compiled from main ($built). Safety tests passed. SupaClean is the new display name. The single setup EXE retains its previous filename so installed SmartClean clients can update seamlessly; user approval remains required." --latest
           if ($LASTEXITCODE -ne 0) { throw 'GitHub release publishing failed.' }

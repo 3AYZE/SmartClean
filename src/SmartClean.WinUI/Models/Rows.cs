@@ -81,9 +81,12 @@ public sealed class SharedComponentRow
     public string Family => Usage.Category + " · " + Usage.Architecture
         + (Usage.Registered ? " · installed " + Usage.InstalledVersion : " · installation unverified");
     public string Summary => Usage.Evidence.Count == 0
-        ? "No observed references — keep protected"
+        ? "No detected dependents — remains protected"
         : Usage.Evidence.Select(x => x.AppId).Distinct().Count()
             + " app(s) with evidence — review details";
+    public string InstallerParts => Usage.InstallerParts.Count > 1
+        ? "Grouped installer entries: " + string.Join(", ", Usage.InstallerParts)
+        : "";
     public string Details => Usage.Evidence.Count == 0
         ? "No matching imports or package declarations were observed in this bounded scan. "
           + "This does not mean the component is unused or safe to uninstall."
@@ -92,4 +95,35 @@ public sealed class SharedComponentRow
             + e.Detail + "\n  Evidence: " + e.EvidencePath))
           + (Usage.Evidence.Count > 35 ? "\nAdditional evidence omitted from the preview." : "");
     public SharedComponentRow(SharedComponentUsage usage) => Usage = usage;
+}
+
+
+public sealed class ServiceRelationshipRow
+{
+    public ServiceRelationship Service { get; }
+    public string Name => Service.DisplayName;
+    public string Category => Service.AssociatedAppName is not null
+        ? "Registered application: " + Service.AssociatedAppName
+        : Service.ExecutableUnderWindows ? "Executable in Windows directory"
+            : "No registered app association";
+    public string Summary => Service.ServiceName + " · " + Service.StartMode;
+    public string Details => Name + "\nService: " + Service.ServiceName
+        + "\nExecutable: " + Service.ExecutablePath
+        + "\nStartup: " + Service.StartMode
+        + "\n" + Category
+        + "\nThis associates a service executable with a folder, not proof that the service uses a particular runtime.";
+    public ServiceRelationshipRow(ServiceRelationship service) => Service = service;
+}
+
+public sealed class UnreferencedRow
+{
+    public string Name { get; }
+    public string Type { get; }
+    public string Explanation { get; }
+    public UnreferencedRow(string name, string type, string explanation)
+    {
+        Name = name;
+        Type = type;
+        Explanation = explanation;
+    }
 }
