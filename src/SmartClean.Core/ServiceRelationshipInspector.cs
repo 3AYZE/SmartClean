@@ -65,11 +65,11 @@ public sealed class ServiceRelationshipInspector
                     var inWindowsDir = path.StartsWith(windowsDir, StringComparison.OrdinalIgnoreCase);
                     var mode = key.GetValue("Start") switch
                     {
-                        int 0 => "Boot",
-                        int 1 => "System",
-                        int 2 => "Automatic",
-                        int 3 => "Demand",
-                        int 4 => "Disabled",
+                        0 => "Boot",
+                        1 => "System",
+                        2 => "Automatic",
+                        3 => "Demand",
+                        4 => "Disabled",
                         _ => "Unknown"
                     };
                     found.Add(new ServiceRelationship(keyName,
