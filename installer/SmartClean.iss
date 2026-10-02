@@ -21,7 +21,8 @@ Compression=lzma2
 SolidCompression=yes
 OutputDir=..\output\releases
 OutputBaseFilename=SmartClean-Setup
-UninstallDisplayIcon={app}\SmartClean.WinUI.exe
+SetupIconFile=..\src\SmartClean.WinUI\Assets\SupaClean.ico
+UninstallDisplayIcon={app}\Assets\SupaClean.ico
 CloseApplications=yes
 RestartApplications=no
 DisableWelcomePage=yes
@@ -35,8 +36,8 @@ Source: "{#BuildOutput}\*"; DestDir: "{app}"; Flags: ignoreversion recursesubdir
 Type: files; Name: "{autoprograms}\SmartClean.lnk"
 Type: files; Name: "{autodesktop}\SmartClean.lnk"
 [Icons]
-Name: "{autoprograms}\SupaClean"; Filename: "{app}\SmartClean.WinUI.exe"
-Name: "{autodesktop}\SupaClean"; Filename: "{app}\SmartClean.WinUI.exe"; Tasks: desktopicon
+Name: "{autoprograms}\SupaClean"; Filename: "{app}\SmartClean.WinUI.exe"; IconFilename: "{app}\Assets\SupaClean.ico"
+Name: "{autodesktop}\SupaClean"; Filename: "{app}\SmartClean.WinUI.exe"; IconFilename: "{app}\Assets\SupaClean.ico"; Tasks: desktopicon
 [Tasks]
 Name: "desktopicon"; Description: "Create desktop shortcut"; Flags: unchecked
 [Run]

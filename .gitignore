@@ -6,3 +6,6 @@ output/
 *.suo
 *.pdb
 TestResults/
+src/SmartClean.WinUI/Assets/SupaClean.ico
+src/SmartClean.WinUI/Assets/SupaClean-Tray.ico
+src/SmartClean.WinUI/Assets/SupaClean-Icon.png

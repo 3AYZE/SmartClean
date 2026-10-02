@@ -23,9 +23,17 @@
     <SelfContained>true</SelfContained>
     <Platforms>x64;arm64</Platforms>
     <PublishReadyToRun>false</PublishReadyToRun>
+    <ApplicationIcon>Assets\SupaClean.ico</ApplicationIcon>
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="Microsoft.WindowsAppSDK" Version="2.5.1" />
     <ProjectReference Include="..\SmartClean.Core\SmartClean.Core.csproj" />
+    <Content Include="Assets\SupaClean.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\SupaClean-Tray.ico" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <Content Include="Assets\SupaClean-Icon.png" CopyToOutputDirectory="PreserveNewest" CopyToPublishDirectory="PreserveNewest" />
+    <None Include="Assets\SupaClean.svg" />
   </ItemGroup>
+  <Target Name="GenerateSupaCleanIcons" BeforeTargets="PrepareForBuild" Condition="'$(OS)' == 'Windows_NT'">
+    <Exec Command="powershell.exe -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\tools\Generate-SupaCleanIcons.ps1&quot; -OutputDirectory &quot;$(MSBuildProjectDirectory)\Assets&quot;" />
+  </Target>
 </Project>

@@ -14,6 +14,12 @@ The original installer AppId and installation directory are intentionally kept
 so the upgrade replaces the existing installation in place. Start Menu and
 desktop shortcuts are renamed; recovery and update history are preserved.
 
+## Windows icon assets
+
+SupaClean uses one simple Fluent-style identity: a blue/cyan rounded tile, a bold white **S**, and one small sparkle. The build generates a multi-resolution `SupaClean.ico` for the EXE, desktop shortcut and taskbar (16, 20, 24, 32, 40, 48, 64, 128 and 256 px). A separate `SupaClean-Tray.ico` keeps only the small Windows notification/background-task sizes (16–48 px), with the sparkle removed at the smallest sizes for legibility. The editable source is `src/SmartClean.WinUI/Assets/SupaClean.svg`; `tools/Generate-SupaCleanIcons.ps1` deterministically creates the Windows assets before every build.
+
+The icon generator is part of the project build, so local builds and GitHub releases use the same artwork. Icon generation failure stops the build instead of silently shipping the generic executable icon.
+
 ## What works in current source
 
 - **Overview:** app inventory, observed declarations, available space and a bounded folder scan. Folder errors identify affected folders.

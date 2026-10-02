@@ -58,6 +58,19 @@ jobs:
           $actual = [System.Reflection.AssemblyName]::GetAssemblyName($dll).Version.ToString()
           $expected = '${{ steps.version.outputs.version }}'
           if ($actual -ne $expected) { throw "Compiled version $actual does not match release version $expected." }
+      - name: Verify SupaClean icon assets
+        shell: pwsh
+        run: |
+          $appIcon = 'output/SmartClean-win-x64/Assets/SupaClean.ico'
+          $trayIcon = 'output/SmartClean-win-x64/Assets/SupaClean-Tray.ico'
+          if (!(Test-Path $appIcon) -or (Get-Item $appIcon).Length -lt 1024) { throw 'Desktop/taskbar icon missing from published app.' }
+          if (!(Test-Path $trayIcon) -or (Get-Item $trayIcon).Length -lt 1024) { throw 'Tray/background icon missing from published app.' }
+          Add-Type -AssemblyName System.Drawing
+          $embedded = [System.Drawing.Icon]::ExtractAssociatedIcon((Resolve-Path 'output/SmartClean-win-x64/SmartClean.WinUI.exe').Path)
+          if ($null -eq $embedded) { throw 'Published executable has no associated Windows icon.' }
+          $embedded.Dispose()
+          Write-Host 'SupaClean desktop, taskbar and tray icon checks passed.'
+
       - name: Install Inno Setup
         shell: pwsh
         run: choco install innosetup --no-progress -y

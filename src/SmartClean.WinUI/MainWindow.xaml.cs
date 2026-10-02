@@ -29,6 +29,24 @@ public sealed partial class MainWindow : Window
         StartupDiagnostics.Record("MainWindow constructor entered (before XAML)");
         InitializeComponent();
         StartupDiagnostics.Record("MainWindow XAML initialized");
+        try
+        {
+            var iconPath = Path.Combine(AppContext.BaseDirectory, "Assets", "SupaClean.ico");
+            if (File.Exists(iconPath))
+            {
+                AppWindow.SetIcon(iconPath);
+                StartupDiagnostics.Record("SupaClean window/taskbar icon applied");
+            }
+            else
+            {
+                StartupDiagnostics.Record("SupaClean icon asset not found; executable icon fallback will be used");
+            }
+        }
+        catch (Exception ex)
+        {
+            // Icon failure must never prevent the cleaner from opening.
+            StartupDiagnostics.Record("SupaClean window icon could not be applied: " + ex.Message);
+        }
         ExtendsContentIntoTitleBar = true;
         SetTitleBar(TitleBarArea);
         StartupDiagnostics.Record("MainWindow title bar configured");
