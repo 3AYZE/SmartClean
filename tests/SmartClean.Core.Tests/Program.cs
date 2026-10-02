@@ -88,6 +88,48 @@ Check(!ProtectionRules.Classify("Old Video Editor", "Example Inc").IsProtected,
 Check(ProtectionRules.Classify(null, null).IsProtected,
     "Missing app name treated as protected");
 
+InstalledApp RemovalApp(string id, string name, bool protectedApp, string? command) =>
+    new(id, name, "Example Inc", "1.0", @"C:\Program Files\Example", 25_000_000,
+        DateTime.Today.AddDays(-100), "test-registry", protectedApp,
+        protectedApp ? "Protected fixture" : "Manual review fixture", command);
+
+var msiFromKey = RemovalApp(
+    "LocalMachine/Registry64/{11111111-2222-3333-4444-555555555555}",
+    "Example MSI", false, null);
+var msiPlan = AppRemovalPlanner.Plan(msiFromKey);
+Check(msiPlan.Method == AppRemovalMethod.WindowsInstaller
+      && msiPlan.CanDirectUninstall
+      && msiPlan.ProductCode == "{11111111-2222-3333-4444-555555555555}",
+    "Validated MSI product-code registry key enables reviewed direct uninstall");
+
+var msiFromCommand = RemovalApp("LocalMachine/Registry64/Example",
+    "Example MSI Command", false,
+    @"""C:\Windows\System32\msiexec.exe"" /I {AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}");
+Check(AppRemovalPlanner.TryGetMsiProductCode(msiFromCommand, out var commandProduct)
+      && commandProduct == "{AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}",
+    "MSI product GUID can be read from an actual msiexec command without executing it");
+
+var maliciousCommand = RemovalApp("LocalMachine/Registry64/Bad",
+    "Bad Command", false,
+    @"C:\Temp\evil.exe msiexec /x {AAAAAAAA-BBBB-CCCC-DDDD-EEEEEEEEEEEE}");
+Check(!AppRemovalPlanner.TryGetMsiProductCode(maliciousCommand, out _)
+      && AppRemovalPlanner.Plan(maliciousCommand).Method == AppRemovalMethod.WindowsSettings,
+    "Arbitrary registry command containing msiexec text cannot become direct uninstall");
+
+var nonMsi = RemovalApp("CurrentUser/Registry64/ExampleNonMsi",
+    "Example EXE Uninstaller", false, @"""C:\Program Files\Example\uninstall.exe"" /remove");
+Check(AppRemovalPlanner.Plan(nonMsi).Method == AppRemovalMethod.WindowsSettings
+      && !AppRemovalPlanner.Plan(nonMsi).CanDirectUninstall,
+    "Non-MSI uninstall strings remain Windows-managed instead of being executed");
+
+var protectedMsi = RemovalApp(
+    "LocalMachine/Registry64/{11111111-2222-3333-4444-555555555555}",
+    "Protected Runtime", true, @"MsiExec.exe /X{11111111-2222-3333-4444-555555555555}");
+Check(AppRemovalPlanner.Plan(protectedMsi).Method == AppRemovalMethod.Protected
+      && !AppRemovalPlanner.Plan(protectedMsi).CanDirectUninstall,
+    "Protected shared component cannot be directly uninstalled even with a valid MSI code");
+
+
 using (var json = JsonDocument.Parse("""
     {"runtimeOptions":{"tfm":"net10.0","framework":{"name":"Microsoft.NETCore.App","version":"10.0.0"}}}
     """))

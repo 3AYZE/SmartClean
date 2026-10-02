@@ -9,8 +9,12 @@ public sealed class AppRow
     public string Name => App.Name;
     public string Subtitle => $"{App.Publisher}  ·  {App.Version}";
     public string Size => Formatting.Bytes(App.EstimatedSizeBytes);
-    public string Badge => App.IsProtected ? "Protected" : "Manual review";
-    public string BadgeDescription => App.IsProtected ? "Shared/system safeguard" : "Never auto-removable";
+    public AppRemovalPlan Removal => AppRemovalPlanner.Plan(App);
+    public string Badge => App.IsProtected ? "Protected"
+        : Removal.CanDirectUninstall ? "Uninstall ready" : "Windows-managed";
+    public string BadgeDescription => App.IsProtected ? "Shared/system safeguard"
+        : Removal.CanDirectUninstall ? "Validated MSI uninstall available"
+        : "Use Windows Installed apps";
     public AppRow(InstalledApp app) => App = app;
 }
 

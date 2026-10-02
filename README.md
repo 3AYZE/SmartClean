@@ -23,7 +23,7 @@ The icon generator is part of the project build, so local builds and GitHub rele
 ## What works in current source
 
 - **Overview:** app inventory, observed declarations, available space and a bounded folder scan. Folder errors identify affected folders.
-- **Applications:** search registered software, review known dependencies and open Windows Settings > Installed apps for a user-approved uninstall. SupaClean never executes uninstall strings from the registry.
+- **Applications:** search registered software, review dependency/service evidence, and choose removal options. For an unprotected MSI app, SupaClean can launch Windows Installer using only a validated product GUID. For other apps it opens Windows Installed apps. Protected shared/system components cannot use direct removal, and raw registry uninstall commands are never executed. Install folders can be opened for inspection but are never deleted directly.
 - **Cleanup:** inspect regular top-level .tmp, .temp, .log and .dmp files in your own LOCAL temporary folder. Eligible files must be at least 30 days old. The page shows eligible file names, locations, dates and sizes, plus read-only examples and counts for excluded files with specific reasons. Users select items, see the full review list, can uncheck individual entries and confirm before any move. No automatic removal.
 - **Recovery:** move only reviewed and revalidated candidates into a per-user vault on the same volume, journaling the original path. Select which Recovery files to restore or delete. The final deletion dialog lists every chosen file, original path and size, permits individual deselection, and requires explicit confirmation. Existing files are never overwritten on restore.
 - **Protection:** mandatory safeguards for shared runtimes, personal folders, linked paths and unknown dependencies. A second component inspector covers recognized registered Visual C++ (2013 and 2015–2022), WebView2, Windows App SDK, Java, Python, Vulkan and legacy DirectX components. It examines bounded, read-only native PE imports and managed dependency manifests for registered applications. Each relationship shows its supporting file and detection method. It cannot prove the exact installed redistributable was used, or that a runtime without evidence is unused.
@@ -64,6 +64,15 @@ anything is unused. Automatic uninstall decisions remain disabled.
 - **Unverified:** an app's install path is missing/inaccessible, a binary loads DLLs dynamically, or only optional features need the runtime. Missing observed relationships never authorize a component uninstall.
 
 Inspection is bounded to 12 binaries, 8 dependency manifests and 4 shallow directories per registered app, subject to file-size and app limits. Executables are never started and privileges are not elevated. Results are informational; dependency-based automatic uninstalls remain disabled.
+
+## Application removal model
+
+SupaClean treats **uninstalling an app** differently from deleting its folder. A selected application shows its publisher, version, estimated size, observed dependency evidence, associated services, install location, and available removal method.
+
+- **Validated MSI:** if the uninstall registry key is a valid MSI product GUID, or the registered command is specifically an `msiexec /I|/X {GUID}` form, SupaClean discards the registry command and launches Windows' own `msiexec.exe /x {GUID}` after a confirmation dialog. The Windows Installer UI still performs the actual uninstall and can be canceled.
+- **Other Win32 apps:** SupaClean opens **Windows Installed apps** instead of executing an EXE/command from the uninstall registry.
+- **Protected runtimes/system components:** direct uninstall stays disabled even if an MSI GUID exists.
+- **No folder deletion:** application directories, user data, saves and leftover folders are not recursively deleted by the Applications page.
 
 ## CI and release policy
 

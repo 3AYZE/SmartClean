@@ -30,6 +30,13 @@
   architecture, and per-machine/per-user installation scope. An empty inbound
   reference list is never a deletion recommendation.
 
+## Application uninstall safeguards
+
+- Direct uninstall is limited to non-protected entries with a validated MSI product GUID. SupaClean launches the operating-system `msiexec.exe` with only `/x` and the normalized GUID; it never runs the registry's full uninstall command.
+- A command that merely contains the text `msiexec` is not accepted. It must parse as the msiexec executable followed by an install/uninstall switch and a GUID.
+- Non-MSI applications are handed to Windows Installed apps. Protected shared/system entries have no direct uninstall action.
+- Uninstall actions never recursively delete install folders, application data, game saves or user files. Users must confirm before opening the MSI uninstaller.
+
 ## Automated core checks
 
 - [x] Shared runtimes remain protected even without observed dependent apps.

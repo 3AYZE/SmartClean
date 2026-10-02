@@ -388,7 +388,10 @@ public sealed partial class MainWindow : Window
             DetailProtection.Text = "No item selected.";
             DetailDependencies.Text = "Select an item to inspect its evidence.";
             DetailLocation.Text = "—";
+            DetailRemovalStatus.Text = "Select an application to see available uninstall methods.";
+            MsiUninstallButton.IsEnabled = false;
             OpenWindowsUninstallButton.IsEnabled = false;
+            OpenInstallFolderButton.IsEnabled = false;
             return;
         }
         var app = row.App;
@@ -415,7 +418,12 @@ public sealed partial class MainWindow : Window
                     "• " + service.DisplayName + " (" + service.ServiceName + ")"
                     + "\n  Executable: " + service.ExecutablePath));
         DetailLocation.Text = app.InstallLocation ?? "Not reported in uninstall registry.";
+        var removal = AppRemovalPlanner.Plan(app);
+        DetailRemovalStatus.Text = removal.Summary;
+        MsiUninstallButton.IsEnabled = removal.CanDirectUninstall;
         OpenWindowsUninstallButton.IsEnabled = !app.IsProtected;
+        OpenInstallFolderButton.IsEnabled = !string.IsNullOrWhiteSpace(app.InstallLocation)
+            && Directory.Exists(app.InstallLocation);
     }
 
 
@@ -730,26 +738,100 @@ public sealed partial class MainWindow : Window
         }
     }
 
+    private async void MsiUninstall_Click(object sender, RoutedEventArgs e)
+    {
+        if (AppList.SelectedItem is not AppRow row) return;
+        var app = row.App;
+        var removal = AppRemovalPlanner.Plan(app);
+        if (app.IsProtected || !removal.CanDirectUninstall
+            || removal.Method != AppRemovalMethod.WindowsInstaller
+            || string.IsNullOrWhiteSpace(removal.ProductCode))
+            return;
+
+        var evidenceCount = (_snapshot?.Dependencies.Count(d => d.AppId == app.Id) ?? 0)
+            + (_snapshot?.OtherComponentScan.Evidence.Count(d => d.AppId == app.Id) ?? 0);
+        var serviceCount = _snapshot?.ServiceScan.Services.Count(d => d.AssociatedAppId == app.Id) ?? 0;
+        var size = Formatting.Bytes(app.EstimatedSizeBytes);
+
+        if (!await AskConfirmationAsync("Uninstall this application",
+            $"{app.Name}\n{app.Publisher} · {app.Version} · {size}\n\n"
+            + $"Observed dependency references: {evidenceCount:N0}\n"
+            + $"Associated registered services: {serviceCount:N0}\n\n"
+            + "SupaClean will launch Windows Installer with a validated product GUID. "
+            + "Windows will show the uninstall UI and may request administrator approval. "
+            + "No application folders or registry uninstall commands are deleted or executed directly.",
+            "Open uninstaller")) return;
+
+        try
+        {
+            var msiexec = Path.Combine(
+                Environment.GetFolderPath(Environment.SpecialFolder.System), "msiexec.exe");
+            if (!File.Exists(msiexec)) msiexec = "msiexec.exe";
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = msiexec,
+                Arguments = "/x " + removal.ProductCode,
+                UseShellExecute = true
+            });
+            StatusInfo.Severity = InfoBarSeverity.Informational;
+            StatusInfo.Title = "Windows Installer opened";
+            StatusInfo.Message = $"Review the Windows uninstall dialog for {app.Name}. "
+                + "After it finishes, run a new SupaClean scan to refresh the application list.";
+            StatusInfo.IsOpen = true;
+        }
+        catch (Exception ex)
+        {
+            StatusInfo.Severity = InfoBarSeverity.Warning;
+            StatusInfo.Title = "Could not open Windows Installer";
+            StatusInfo.Message = ex.Message;
+            StatusInfo.IsOpen = true;
+            StartupDiagnostics.Record("Launching validated MSI uninstall: " + ex);
+        }
+    }
+
     private async void OpenWindowsUninstall_Click(object sender, RoutedEventArgs e)
     {
         if (AppList.SelectedItem is not AppRow row || row.App.IsProtected) return;
-        if (!await AskConfirmationAsync("Review uninstall in Windows",
-            $"{row.Name}\n\nSupaClean has NOT verified all dependency relationships. "
-            + "Windows will perform the actual uninstall, if you choose it there. "
-            + "SupaClean will never execute a command stored in the uninstall registry.",
+        if (!await AskConfirmationAsync("Open Windows Installed apps",
+            $"{row.Name}\n\n"
+            + "SupaClean could not validate a direct MSI removal method or you chose Windows review. "
+            + "Windows will perform the actual uninstall if you select Uninstall there. "
+            + "SupaClean does not execute arbitrary uninstall commands stored in the registry.",
             "Open Windows Settings")) return;
         try
         {
             Process.Start(new ProcessStartInfo("ms-settings:appsfeatures") { UseShellExecute = true });
             StatusInfo.Severity = InfoBarSeverity.Informational;
-            StatusInfo.Title = "Windows Settings opened";
-            StatusInfo.Message = "Locate the application by name, review its effects, and uninstall there if appropriate.";
+            StatusInfo.Title = "Windows Installed apps opened";
+            StatusInfo.Message = $"Find {row.Name}, review it, and choose Uninstall there if appropriate.";
             StatusInfo.IsOpen = true;
         }
         catch (Exception ex)
         {
             StatusInfo.Severity = InfoBarSeverity.Warning;
             StatusInfo.Title = "Could not open Windows Settings";
+            StatusInfo.Message = ex.Message;
+            StatusInfo.IsOpen = true;
+        }
+    }
+
+    private void OpenInstallFolder_Click(object sender, RoutedEventArgs e)
+    {
+        if (AppList.SelectedItem is not AppRow row
+            || string.IsNullOrWhiteSpace(row.App.InstallLocation)
+            || !Directory.Exists(row.App.InstallLocation)) return;
+        try
+        {
+            Process.Start(new ProcessStartInfo
+            {
+                FileName = row.App.InstallLocation,
+                UseShellExecute = true
+            });
+        }
+        catch (Exception ex)
+        {
+            StatusInfo.Severity = InfoBarSeverity.Warning;
+            StatusInfo.Title = "Could not open install folder";
             StatusInfo.Message = ex.Message;
             StatusInfo.IsOpen = true;
         }

@@ -194,8 +194,21 @@
                                            TextWrapping="Wrap" />
                                 <TextBlock Text="Install location" FontWeight="SemiBold" Margin="0,6,0,0" />
                                 <TextBlock x:Name="DetailLocation" Text="—" TextWrapping="Wrap" IsTextSelectionEnabled="True" />
-                                <Button x:Name="OpenWindowsUninstallButton" Content="Review in Windows Settings"
-                                        Click="OpenWindowsUninstall_Click" IsEnabled="False" HorizontalAlignment="Left" />
+                                <Rectangle Height="1" Fill="{ThemeResource SmartCardStroke}" Margin="0,4" />
+                                <TextBlock Text="Removal options" FontWeight="SemiBold" />
+                                <TextBlock x:Name="DetailRemovalStatus" Text="Select an application to see available uninstall methods."
+                                           Foreground="{ThemeResource SmartSubtleText}" TextWrapping="Wrap" />
+                                <StackPanel Orientation="Horizontal" Spacing="8">
+                                    <Button x:Name="MsiUninstallButton" Content="Uninstall app"
+                                            Click="MsiUninstall_Click" IsEnabled="False"
+                                            Style="{StaticResource AccentButtonStyle}" />
+                                    <Button x:Name="OpenWindowsUninstallButton" Content="Windows Installed apps"
+                                            Click="OpenWindowsUninstall_Click" IsEnabled="False" />
+                                    <Button x:Name="OpenInstallFolderButton" Content="Open install folder"
+                                            Click="OpenInstallFolder_Click" IsEnabled="False" />
+                                </StackPanel>
+                                <TextBlock Text="SupaClean never deletes an application folder directly. Direct uninstall is offered only for a validated MSI product code; other apps are handed to Windows."
+                                           Foreground="{ThemeResource SmartSubtleText}" FontSize="12" TextWrapping="Wrap" />
                                 <TextBlock Text="Important: a native import or package reference may be bundled. Missing evidence does not prove that an app has no dependencies."
                                            Foreground="{ThemeResource SmartSubtleText}" FontSize="12" TextWrapping="Wrap" />
                             </StackPanel>
