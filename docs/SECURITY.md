@@ -30,6 +30,13 @@
   architecture, and per-machine/per-user installation scope. An empty inbound
   reference list is never a deletion recommendation.
 
+## SupaClean self-uninstall safeguards
+
+- Self-uninstall is available only when SupaClean finds the exact installer-managed `Uninstall/unins000.exe` path, or the legacy root `unins000.exe` used by older in-place installations. Reparse-point executables and unexpected filenames are rejected.
+- The app never deletes its own installation directory. It launches the Inno Setup uninstaller after explicit confirmation and then closes.
+- Recovery and local SupaClean data are retained by default. Removing those records is a separate data-management decision, not part of app uninstall.
+- Portable/development builds without a recognized uninstaller keep the self-uninstall button disabled.
+
 ## Application uninstall safeguards
 
 - Direct uninstall is limited to non-protected entries with a validated MSI product GUID. SupaClean launches the operating-system `msiexec.exe` with only `/x` and the normalized GUID; it never runs the registry's full uninstall command.

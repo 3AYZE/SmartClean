@@ -570,6 +570,21 @@
                                            TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
                             </StackPanel>
                         </Border>
+                        <Border Background="{ThemeResource SmartCardBackground}" BorderBrush="{ThemeResource SmartCardStroke}"
+                                BorderThickness="1" CornerRadius="12" Padding="20">
+                            <StackPanel Spacing="10">
+                                <TextBlock Text="Uninstall SupaClean" FontWeight="SemiBold" FontSize="17" />
+                                <TextBlock x:Name="SelfUninstallStatus"
+                                           Text="Checking whether this installation has a SupaClean uninstaller..."
+                                           TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
+                                <Button x:Name="UninstallSupaCleanButton" Content="Uninstall SupaClean"
+                                        Click="UninstallSupaClean_Click" IsEnabled="False"
+                                        HorizontalAlignment="Left" />
+                                <TextBlock Text="This removes the installed application through its Windows installer. SupaClean will not delete its own files manually. Recovery files and local SupaClean data are kept by default so an uninstall cannot silently destroy recoverable files."
+                                           FontSize="12" TextWrapping="Wrap" Foreground="{ThemeResource SmartSubtleText}" />
+                            </StackPanel>
+                        </Border>
+
                     </StackPanel>
                 </ScrollViewer>
             </Grid>

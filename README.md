@@ -65,6 +65,12 @@ anything is unused. Automatic uninstall decisions remain disabled.
 
 Inspection is bounded to 12 binaries, 8 dependency manifests and 4 shallow directories per registered app, subject to file-size and app limits. Executables are never started and privileges are not elevated. Results are informational; dependency-based automatic uninstalls remain disabled.
 
+## SupaClean self-uninstall
+
+Settings includes **Uninstall SupaClean** for installer-managed builds. SupaClean only launches its own expected Inno Setup uninstaller (`Uninstall/unins000.exe`, with the legacy in-place `unins000.exe` path accepted for upgrades). It does not recursively delete its program directory or invoke a registry-supplied command. After explicit confirmation, SupaClean starts the Windows uninstaller and closes itself. Recovery files and local SupaClean data are retained by default to avoid destroying recoverable files during application removal.
+
+Portable/development copies that do not contain the expected installer uninstaller do not expose a self-delete action.
+
 ## Application removal model
 
 SupaClean treats **uninstalling an app** differently from deleting its folder. A selected application shows its publisher, version, estimated size, observed dependency evidence, associated services, install location, and available removal method.

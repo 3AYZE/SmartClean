@@ -23,6 +23,7 @@ OutputDir=..\output\releases
 OutputBaseFilename=SmartClean-Setup
 SetupIconFile=..\src\SmartClean.WinUI\Assets\SupaClean.ico
 UninstallDisplayIcon={app}\Assets\SupaClean.ico
+UninstallFilesDir={app}\Uninstall
 CloseApplications=yes
 RestartApplications=no
 DisableWelcomePage=yes

@@ -129,6 +129,39 @@ Check(AppRemovalPlanner.Plan(protectedMsi).Method == AppRemovalMethod.Protected
       && !AppRemovalPlanner.Plan(protectedMsi).CanDirectUninstall,
     "Protected shared component cannot be directly uninstalled even with a valid MSI code");
 
+var selfUninstallFixture = Path.Combine(Path.GetTempPath(),
+    "supaclean-self-uninstall-" + Guid.NewGuid().ToString("N"));
+Directory.CreateDirectory(selfUninstallFixture);
+try
+{
+    Check(SelfUninstallLocator.Find(selfUninstallFixture) is null,
+        "Self uninstall unavailable in a portable folder without Inno uninstaller");
+
+    var uninstallDir = Path.Combine(selfUninstallFixture, "Uninstall");
+    Directory.CreateDirectory(uninstallDir);
+    var managedUninstaller = Path.Combine(uninstallDir, "unins000.exe");
+    File.WriteAllBytes(managedUninstaller, [0x4D, 0x5A, 0x00, 0x00]);
+    Check(SelfUninstallLocator.Find(selfUninstallFixture) == Path.GetFullPath(managedUninstaller),
+        "SupaClean locates only the fixed installer-managed self-uninstaller path");
+
+    File.Delete(managedUninstaller);
+    var legacyUninstaller = Path.Combine(selfUninstallFixture, "unins000.exe");
+    File.WriteAllBytes(legacyUninstaller, [0x4D, 0x5A, 0x00, 0x00]);
+    Check(SelfUninstallLocator.Find(selfUninstallFixture) == Path.GetFullPath(legacyUninstaller),
+        "Legacy in-place SmartClean/SupaClean uninstaller remains discoverable after upgrades");
+
+    File.Delete(legacyUninstaller);
+    File.WriteAllBytes(Path.Combine(selfUninstallFixture, "unins001.exe"), [0x4D, 0x5A, 0x00, 0x00]);
+    Check(SelfUninstallLocator.Find(selfUninstallFixture) is null,
+        "Unexpected executable names are never accepted as SupaClean self-uninstaller");
+}
+finally
+{
+    if (Directory.Exists(selfUninstallFixture))
+        Directory.Delete(selfUninstallFixture, recursive: true);
+}
+
+
 
 using (var json = JsonDocument.Parse("""
     {"runtimeOptions":{"tfm":"net10.0","framework":{"name":"Microsoft.NETCore.App","version":"10.0.0"}}}

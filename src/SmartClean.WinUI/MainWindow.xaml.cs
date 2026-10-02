@@ -23,6 +23,7 @@ public sealed partial class MainWindow : Window
     private ReleaseInfo? _availableUpdate;
     private bool _checkingUpdates;
     private bool _installingUpdate;
+    private string? _selfUninstaller;
 
     public MainWindow()
     {
@@ -63,6 +64,7 @@ public sealed partial class MainWindow : Window
         };
         PopulateDriveChoices();
         CurrentVersionText.Text = $"Installed version: {(typeof(MainWindow).Assembly.GetName().Version ?? ReleaseClient.InstalledVersion)}";
+        RefreshSelfUninstallStatus();
         RefreshRecoveryItems();
         // Do not hold up window activation or scanning for network access.
         _ = CheckForUpdatesAsync(manual: false);
@@ -834,6 +836,59 @@ public sealed partial class MainWindow : Window
             StatusInfo.Title = "Could not open install folder";
             StatusInfo.Message = ex.Message;
             StatusInfo.IsOpen = true;
+        }
+    }
+
+    private void RefreshSelfUninstallStatus()
+    {
+        _selfUninstaller = SelfUninstallLocator.Find(AppContext.BaseDirectory);
+        if (_selfUninstaller is not null)
+        {
+            SelfUninstallStatus.Text = "This installed copy can remove itself using the SupaClean Windows uninstaller. "
+                + "Recovery and local SupaClean data are retained by default.";
+            UninstallSupaCleanButton.IsEnabled = true;
+        }
+        else
+        {
+            SelfUninstallStatus.Text = "No installer-managed SupaClean uninstaller was found. "
+                + "This may be a portable/development build; no self-delete action is offered.";
+            UninstallSupaCleanButton.IsEnabled = false;
+        }
+    }
+
+    private async void UninstallSupaClean_Click(object sender, RoutedEventArgs e)
+    {
+        RefreshSelfUninstallStatus();
+        if (_selfUninstaller is null) return;
+
+        if (!await AskConfirmationAsync("Uninstall SupaClean",
+            "SupaClean will close and open its Windows uninstaller.\n\n"
+            + "The installed application and shortcuts will be removed. "
+            + "Recovery files and local SupaClean data are kept by default so recoverable files are not silently destroyed.\n\n"
+            + "You can cancel in the uninstaller before removal completes.",
+            "Open uninstaller")) return;
+
+        try
+        {
+            var process = Process.Start(new ProcessStartInfo
+            {
+                FileName = _selfUninstaller,
+                UseShellExecute = true
+            });
+            if (process is null)
+                throw new InvalidOperationException("Windows did not start the SupaClean uninstaller.");
+
+            StartupDiagnostics.Record("SupaClean self-uninstaller launched by explicit user request");
+            Close();
+        }
+        catch (Exception ex)
+        {
+            StartupDiagnostics.Record("SupaClean self-uninstall launch failed: " + ex);
+            StatusInfo.Severity = InfoBarSeverity.Warning;
+            StatusInfo.Title = "Could not open SupaClean uninstaller";
+            StatusInfo.Message = ex.Message;
+            StatusInfo.IsOpen = true;
+            RefreshSelfUninstallStatus();
         }
     }
 
